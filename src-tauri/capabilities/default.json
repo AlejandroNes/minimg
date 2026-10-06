@@ -1,0 +1,38 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permisos de la ventana principal",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:app:allow-version",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:resources:allow-close",
+    "allow-inspect-images",
+    "allow-get-thumbnail",
+    "allow-convert-images",
+    "allow-apply-watermark",
+    "allow-cancel-conversion",
+    "allow-read-file-bytes",
+    "allow-open-output-directory",
+    "allow-updates-configured",
+    "dialog:allow-open",
+    "opener:allow-reveal-item-in-dir",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://nesvatek.com/products/minimg/"
+        },
+        {
+          "url": "https://nesvatek.com/products/minimg/legal/terms"
+        },
+        {
+          "url": "https://nesvatek.com/products/minimg/legal/privacy"
+        }
+      ]
+    }
+  ]
+}

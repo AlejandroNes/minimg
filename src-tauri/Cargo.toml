@@ -1,0 +1,32 @@
+[package]
+name = "minimg"
+version = "1.0.0"
+description = "Optimización, conversión, redimensionado y marcas de agua para imágenes, sin conexión."
+homepage = "https://nesvatek.com/products/minimg/"
+authors = ["Nesvatek"]
+license = "GPL-3.0-only"
+edition = "2024"
+
+[[bin]]
+name = "Minimg"
+path = "src/main.rs"
+
+[lib]
+name = "minimg_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5.6", features = [] }
+
+[dependencies]
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
+rayon = "1.12.0"
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "2.11.5", features = [] }
+tauri-plugin-dialog = "2.7.2"
+tauri-plugin-opener = "2.5.4"
+webp = "0.3.1"
+
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
+tauri-plugin-process = "2.3.1"
+tauri-plugin-updater = "2.12.0"

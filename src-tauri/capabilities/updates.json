@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "updates",
+  "description": "Actualizaciones oficiales y reinicio en Windows y macOS",
+  "windows": ["main"],
+  "platforms": ["windows", "macOS"],
+  "permissions": [
+    "updater:allow-check",
+    "updater:allow-download-and-install",
+    "process:allow-restart"
+  ]
+}

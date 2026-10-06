@@ -1,0 +1,70 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Minimg",
+  "mainBinaryName": "Minimg",
+  "version": "../package.json",
+  "identifier": "com.alejandro.webpcompressor",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Minimg",
+        "width": 1180,
+        "height": 780,
+        "minWidth": 760,
+        "minHeight": 620,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "connect-src": "ipc: http://ipc.localhost",
+        "font-src": "'self'",
+        "img-src": "'self' blob: data:",
+        "style-src": "'self' 'unsafe-inline'",
+        "object-src": "'none'",
+        "base-uri": "'none'",
+        "frame-ancestors": "'none'"
+      },
+      "capabilities": [
+        "default",
+        "updates"
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": false,
+    "targets": "all",
+    "category": "Utility",
+    "publisher": "Nesvatek",
+    "copyright": "Copyright © 2026 Nesvatek",
+    "homepage": "https://nesvatek.com/products/minimg/",
+    "resources": {
+      "../src/assets/fonts/OFL.txt": "licenses/Outfit-OFL.txt",
+      "../LICENSE": "licenses/MinIMG-GPL-3.0.txt"
+    },
+    "shortDescription": "Optimización, conversión, redimensionado y marcas de agua para imágenes, sin conexión.",
+    "longDescription": "Minimg es una aplicación de escritorio desarrollada por Nesvatek para Windows y macOS. Optimiza y convierte imágenes JPG, JPEG, PNG y WebP, permite redimensionarlas y aplicar marcas de agua por lote. El procesamiento se realiza localmente, sin enviar imágenes a servicios externos.",
+    "windows": {
+      "wix": {
+        "upgradeCode": "bef0c2be-1a03-5cae-adc2-efb6115bdf2d"
+      }
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "license": "GPL-3.0-only",
+    "licenseFile": "../LICENSE"
+  }
+}
