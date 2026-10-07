@@ -1,0 +1,129 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.repository == 'AlejandroNes/minimg'
+    name: Release (${{ matrix.target }})
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      # Each build merges its platform into the same draft latest.json.
+      max-parallel: 1
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            updater-platform: darwin-aarch64
+            apple-signing-identity: '-'
+            bundles: app,dmg
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            updater-platform: darwin-x86_64
+            apple-signing-identity: '-'
+            bundles: app,dmg
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            updater-platform: windows-x86_64
+            apple-signing-identity: ''
+            bundles: nsis,msi
+    runs-on: ${{ matrix.platform }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Validate tag and application version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node --input-type=module - <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+          const config = JSON.parse(readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+          assert.match(process.env.RELEASE_TAG, /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+          assert.equal(process.env.RELEASE_TAG, `v${pkg.version}`, 'Tag and application version must match');
+          assert.equal(config.version, '../package.json');
+          assert.equal(config.bundle.createUpdaterArtifacts, true);
+          assert.equal(config.plugins.updater.endpoints[0], 'https://github.com/AlejandroNes/minimg/releases/latest/download/latest.json');
+          console.log(`Validated ${process.env.RELEASE_TAG}`);
+          NODE
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install locked frontend dependencies
+        run: npm ci
+
+      - name: Check TypeScript and metadata
+        run: npm run check
+
+      - name: Test frontend and updater
+        run: npm test
+
+      - name: Build signed updater artifacts and upload draft release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Ad-hoc macOS signing; no Apple certificate or notarization credentials.
+          APPLE_SIGNING_IDENTITY: ${{ matrix.apple-signing-identity }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Minimg v__VERSION__'
+          releaseBody: |
+            Descarga el instalador correspondiente a tu sistema y arquitectura.
+            macOS: firma ad-hoc, sin Developer ID ni notarización; Gatekeeper puede bloquear la apertura.
+            Windows: sin firma de código; SmartScreen puede mostrar advertencias.
+          releaseDraft: true
+          prerelease: false
+          tauriScript: 'npm run tauri --'
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} -- --locked
+          releaseAssetNamePattern: '[name]_[version]_[platform]_[arch][setup][ext]'
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
+          updaterJsonPreferNsis: true
+          retryAttempts: 3
+
+      - name: Validate generated updater manifest
+        env:
+          UPDATER_PLATFORM: ${{ matrix.updater-platform }}
+        run: |
+          node --input-type=module - <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+          const manifest = JSON.parse(readFileSync('latest.json', 'utf8'));
+          assert.equal(manifest.version, pkg.version);
+          const entry = manifest.platforms[process.env.UPDATER_PLATFORM];
+          assert.ok(entry, 'Missing updater platform');
+          assert.ok(typeof entry.signature === 'string' && entry.signature.trim(), 'Missing updater signature');
+          assert.match(entry.url, /^https:\/\/(?:api\.github\.com\/repos|github\.com)\/AlejandroNes\/minimg\/releases\//);
+          console.log(`Validated signed updater manifest for ${process.env.UPDATER_PLATFORM}`);
+          NODE
