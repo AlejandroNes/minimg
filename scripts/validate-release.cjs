@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { supportsFriendlyAssets, friendlyAssets, assetNamed, assertExactCopy } = require('./friendly-release-assets.cjs');
 
 // Shared by release.yml and the manual validator. Only read-only GitHub APIs.
 module.exports = async function validateRelease({ github, context, core }) {
@@ -29,14 +30,6 @@ module.exports = async function validateRelease({ github, context, core }) {
     assert.match(tag || '', /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
     return id;
   });
-  const assetNamed = (assets, name) => {
-    const matches = assets.filter((asset) => asset.name === name);
-    assert.equal(matches.length, 1, `Expected exactly one asset: ${name}`);
-    const asset = matches[0];
-    assert.equal(asset.state, 'uploaded', `Asset not uploaded: ${name}`);
-    assert.ok(Number.isSafeInteger(asset.size) && asset.size > 0, `Empty/invalid asset: ${name}`);
-    return asset;
-  };
   const downloadText = async (asset) => {
     const { data } = await github.rest.repos.getReleaseAsset({
       ...repo, asset_id: asset.id, headers: { accept: 'application/octet-stream' },
@@ -134,6 +127,18 @@ module.exports = async function validateRelease({ github, context, core }) {
           } else skip(`Platform ${key}: signature matches .sig`);
         }
       };
+      if (supportsFriendlyAssets(tag)) {
+        for (const { source, name: friendlyName } of friendlyAssets(tag)) {
+          await check(`Friendly installer ${friendlyName}: exact SHA-256 copy of ${source}`, async () => {
+            const original = assetNamed(assets, source);
+            const copy = assetNamed(assets, friendlyName);
+            await assertExactCopy(github, repo, original, copy);
+          });
+        }
+      } else {
+        core.info(`Friendly installers are not required for historical release ${tag}`);
+      }
+
       for (const { key, stem, installer, ext } of platforms) {
         const installerExt = installer === 'app' ? '.dmg' : '.msi';
         await check(`Installer: ${stem}${installerExt}`, () => assetNamed(assets, stem + installerExt));

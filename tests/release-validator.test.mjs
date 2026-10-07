@@ -1,29 +1,33 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import validateRelease from '../scripts/validate-release.cjs';
+import friendlyModule from '../scripts/friendly-release-assets.cjs';
+const { uploadFriendlyAssets, friendlyAssets } = friendlyModule;
 
-function fixture() {
+function fixture(version = '1.0.0') {
+  const tag = `v${version}`;
+  let nextId = 1;
   const assets = [];
   const contents = new Map();
   const requests = [];
   const failures = [];
   const logs = [];
-  const add = (name, text = 'installer') => {
-    const id = assets.length + 1;
+  const add = (name, text = `installer:${name}`) => {
+    const id = nextId++;
     const asset = {
       id, name, state: 'uploaded', size: text.length,
       url: `https://api.github.com/repos/AlejandroNes/minimg/releases/assets/${id}`,
-      browser_download_url: `https://github.com/AlejandroNes/minimg/releases/download/v1.0.0/${name}`,
+      browser_download_url: `https://github.com/AlejandroNes/minimg/releases/download/${tag}/${name}`,
     };
     assets.push(asset);
     contents.set(id, text);
     return asset;
   };
-  const manifest = { version: '1.0.0', pub_date: '2026-10-06T12:00:00.000Z', platforms: {} };
+  const manifest = { version, pub_date: '2026-10-06T12:00:00.000Z', platforms: {} };
   for (const [key, stem, installer, ext] of [
-    ['darwin-aarch64', 'Minimg_1.0.0_darwin_aarch64', 'app', '.app.tar.gz'],
-    ['darwin-x86_64', 'Minimg_1.0.0_darwin_x64', 'app', '.app.tar.gz'],
-    ['windows-x86_64', 'Minimg_1.0.0_windows_x64', 'nsis', '-setup.exe'],
+    ['darwin-aarch64', `Minimg_${version}_darwin_aarch64`, 'app', '.app.tar.gz'],
+    ['darwin-x86_64', `Minimg_${version}_darwin_x64`, 'app', '.app.tar.gz'],
+    ['windows-x86_64', `Minimg_${version}_windows_x64`, 'nsis', '-setup.exe'],
   ]) {
     add(stem + (installer === 'app' ? '.dmg' : '.msi'));
     const updater = add(stem + ext);
@@ -38,7 +42,7 @@ function fixture() {
     }
   }
   const latest = add('latest.json', JSON.stringify(manifest));
-  const release = { id: 405276548, tag_name: 'v1.0.0', draft: true, prerelease: false };
+  const release = { id: 405276548, tag_name: tag, draft: true, prerelease: false, upload_url: 'https://uploads.github.com/repos/AlejandroNes/minimg/releases/405276548/assets{?name,label}' };
   const api = (name, fn) => async (params) => {
     requests.push({ name, params });
     return fn(params);
@@ -51,13 +55,20 @@ function fixture() {
         return { data: Buffer.from(contents.get(asset_id)) };
       }),
       getContent: api('getContent', ({ path, ref }) => {
-        assert.equal(ref, 'v1.0.0');
-        const value = path === 'package.json' ? { version: '1.0.0' } : {
+        assert.equal(ref, tag);
+        const value = path === 'package.json' ? { version } : {
           version: '../package.json', productName: 'Minimg', bundle: { createUpdaterArtifacts: true },
         };
         return { data: { type: 'file', encoding: 'base64', content: Buffer.from(JSON.stringify(value)).toString('base64') } };
       }),
       listReleaseAssets: api('listReleaseAssets', () => assets),
+      uploadReleaseAsset: api('uploadReleaseAsset', ({ name, data }) => ({ data: add(name, Buffer.from(data)) })),
+      deleteReleaseAsset: api('deleteReleaseAsset', ({ asset_id }) => {
+        const index = assets.findIndex((asset) => asset.id === asset_id);
+        assert.ok(index >= 0);
+        assets.splice(index, 1);
+        contents.delete(asset_id);
+      }),
     } },
     paginate: async (method, params) => method(params),
   };
@@ -69,20 +80,20 @@ function fixture() {
     info: (text) => logs.push(text), error: (text) => logs.push(text), warning: (text) => logs.push(text),
     setFailed: (text) => failures.push(text), summary,
   };
-  const run = async () => {
+  const run = async (validator = validateRelease) => {
     const previous = { id: process.env.RELEASE_ID, tag: process.env.RELEASE_TAG };
     process.env.RELEASE_ID = '405276548';
-    process.env.RELEASE_TAG = 'v1.0.0';
+    process.env.RELEASE_TAG = tag;
     try {
       contents.set(latest.id, JSON.stringify(manifest));
-      return await validateRelease({ github, core, context: { repo: { owner: 'AlejandroNes', repo: 'minimg' } } });
+      return await validator({ github, core, context: { repo: { owner: 'AlejandroNes', repo: 'minimg' } } });
     } finally {
       for (const [key, value] of [['RELEASE_ID', previous.id], ['RELEASE_TAG', previous.tag]]) {
         if (value === undefined) delete process.env[key]; else process.env[key] = value;
       }
     }
   };
-  return { assets, contents, latest, manifest, release, github, failures, requests, summary, run };
+  return { assets, contents, latest, manifest, release, github, failures, requests, summary, run, add };
 }
 
 test('validates 11 draft assets with tagged metadata and read-only authenticated APIs', async () => {
@@ -147,4 +158,97 @@ test('rejects duplicate, empty and incomplete installer assets', async () => {
   f.assets.find((asset) => asset.name.endsWith('.msi')).state = 'new';
   const results = await f.run();
   assert.ok(results.filter((result) => result.status === 'FAIL').length >= 3);
+});
+
+
+test('future draft gets three exact friendly installers; a rerun performs no writes', async () => {
+  const f = fixture('1.0.1');
+  const originalAssets = structuredClone(f.assets);
+  const originalContents = new Map(f.contents);
+  await f.run(uploadFriendlyAssets);
+  assert.equal(f.assets.length, 14);
+  for (const { source, name } of friendlyAssets('v1.0.1')) {
+    const original = f.assets.find((asset) => asset.name === source);
+    const friendly = f.assets.find((asset) => asset.name === name);
+    assert.deepEqual(f.contents.get(friendly.id), Buffer.from(f.contents.get(original.id)));
+  }
+  assert.deepEqual(f.assets.slice(0, 11), originalAssets);
+  for (const [id, bytes] of originalContents) assert.deepEqual(f.contents.get(id), bytes);
+  const writes = () => f.requests.filter(({ name }) => /upload|delete/.test(name));
+  assert.equal(writes().length, 3);
+  await f.run(uploadFriendlyAssets);
+  assert.equal(writes().length, 3);
+  const results = await f.run();
+  assert.ok(results.every((result) => result.status === 'PASS'));
+});
+
+test('v1.0.0 upload is a no-op; published future releases are refused before mutation', async () => {
+  const historical = fixture();
+  await historical.run(uploadFriendlyAssets);
+  assert.equal(historical.requests.length, 0);
+  const f = fixture('1.0.1');
+  f.release.draft = false;
+  await assert.rejects(f.run(uploadFriendlyAssets), /only be uploaded to a draft/);
+  assert.ok(f.requests.every(({ name }) => !/upload|delete/.test(name)));
+});
+
+test('replaces only a stale friendly copy or incomplete friendly upload', async () => {
+  const f = fixture('1.0.1');
+  const originalIds = new Set(f.assets.map((asset) => asset.id));
+  f.add('Minimg-Windows.exe', 'old installer');
+  const incomplete = f.add('Minimg-macOS-Intel.dmg', '');
+  incomplete.state = 'starter';
+  await f.run(uploadFriendlyAssets);
+  assert.equal(f.assets.length, 14);
+  const deleted = f.requests.filter(({ name }) => name === 'deleteReleaseAsset');
+  assert.equal(deleted.length, 2);
+  assert.ok(deleted.every(({ params }) => !originalIds.has(params.asset_id)));
+  assert.ok((await f.run()).every((result) => result.status === 'PASS'));
+});
+
+test('upload timeout after acceptance is recovered without duplicate assets', async () => {
+  const f = fixture('1.0.1');
+  const upload = f.github.rest.repos.uploadReleaseAsset;
+  let first = true;
+  f.github.rest.repos.uploadReleaseAsset = async (params) => {
+    const response = await upload(params);
+    if (first) { first = false; throw new Error('Upload response timed out'); }
+    return response;
+  };
+  await f.run(uploadFriendlyAssets);
+  assert.equal(f.assets.length, 14);
+  assert.equal(f.requests.filter(({ name }) => name === 'uploadReleaseAsset').length, 3);
+  assert.equal(f.requests.filter(({ name }) => name === 'deleteReleaseAsset').length, 0);
+});
+
+test('validator rejects missing friendly installers and equal-size wrong bytes', async () => {
+  const f = fixture('1.0.1');
+  const missing = await f.run();
+  assert.equal(missing.filter((result) => result.status === 'FAIL').length, 3);
+  await f.run(uploadFriendlyAssets);
+  const friendly = f.assets.find((asset) => asset.name === 'Minimg-macOS-Apple-Silicon.dmg');
+  f.contents.set(friendly.id, Buffer.alloc(friendly.size, 120));
+  const corrupt = await f.run();
+  assert.equal(corrupt.filter((result) => result.status === 'FAIL').length, 1);
+  assert.ok(corrupt.some((result) => result.detail.includes('SHA-256 mismatch')));
+});
+
+test('missing versioned source prevents any friendly asset writes', async () => {
+  const f = fixture('1.0.1');
+  f.assets.splice(f.assets.findIndex((asset) => asset.name.endsWith('_darwin_x64.dmg')), 1);
+  await assert.rejects(f.run(uploadFriendlyAssets), /Expected exactly one asset/);
+  assert.ok(f.requests.every(({ name }) => !/upload|delete/.test(name)));
+});
+
+test('a transient friendly download failure never causes deletion', async () => {
+  const f = fixture('1.0.1');
+  await f.run(uploadFriendlyAssets);
+  const friendly = f.assets.find((asset) => asset.name === 'Minimg-Windows.exe');
+  const download = f.github.rest.repos.getReleaseAsset;
+  f.github.rest.repos.getReleaseAsset = async (params) => {
+    if (params.asset_id === friendly.id) throw new Error('Temporary network failure');
+    return download(params);
+  };
+  await assert.rejects(f.run(uploadFriendlyAssets), /Temporary network failure/);
+  assert.equal(f.requests.filter(({ name }) => name === 'deleteReleaseAsset').length, 0);
 });

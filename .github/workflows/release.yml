@@ -126,6 +126,18 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Add permanent installer names to the draft (v1.0.1 onward)
+        uses: actions/github-script@v8
+        env:
+          RELEASE_ID: ${{ needs.release.outputs.release-id }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          retries: 3
+          script: |
+            const { uploadFriendlyAssets } = require('./scripts/friendly-release-assets.cjs');
+            await uploadFriendlyAssets({ github, context, core });
+
       - name: Validate uploaded installers, updater manifest and signatures
         uses: actions/github-script@v8
         env:
