@@ -118,7 +118,8 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # Reading draft releases and their assets requires push access.
+      contents: write
     steps:
       - name: Checkout tagged source
         uses: actions/checkout@v7
@@ -131,6 +132,7 @@ jobs:
           RELEASE_ID: ${{ needs.release.outputs.release-id }}
           RELEASE_TAG: ${{ github.ref_name }}
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           retries: 3
           script: |
             const assert = require('node:assert/strict');
