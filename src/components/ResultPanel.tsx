@@ -1,3 +1,5 @@
+import { useTranslation } from "../i18n/useTranslation";
+
 import {
   ArrowDown,
   ArrowRight,
@@ -23,6 +25,7 @@ export function ResultPanel({
   onShowFile: (path: string) => void;
   onCompare: (result: ConversionResult) => void;
 }) {
+  const { t, plural, text, number } = useTranslation();
   const successfulResults = results.filter((r) => r.success);
   const convertedResults = successfulResults.filter((r) => !r.preservedOriginal);
   const optimizedResults = successfulResults.filter((r) => r.optimized);
@@ -45,16 +48,13 @@ export function ResultPanel({
           </span>
           <div>
             <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[var(--color-menta-text)]">
-              {wasCancelled ? "Resultado parcial" : failedResults.length ? "Proceso terminado con errores" : "Todo listo"}
+              {wasCancelled ? t("resultPanel.partialResults") : failedResults.length ? t("resultPanel.processCompletedWithErrors") : t("resultPanel.allDone")}
             </p>
             <h2 className="mt-1 text-xl font-black">
-              {successfulResults.length}{" "}
-              {successfulResults.length === 1 ? "imagen guardada" : "imágenes guardadas"}
+              {plural("images.saved.other", successfulResults.length)}
             </h2>
             <p className="mt-1.5 text-sm text-[var(--color-text-secondary)]">
-              {convertedResults.length} convertidas · {optimizedResults.length} redujeron su peso ·{" "}
-              {unchangedResults.length} ya estaban optimizadas · {failedResults.length} con problemas
-            </p>
+              {t("results.summary", { converted: convertedResults.length, optimized: optimizedResults.length, unchanged: unchangedResults.length, failed: failedResults.length })}</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -63,8 +63,7 @@ export function ResultPanel({
             onClick={onShowFiles}
             className="inline-flex items-center justify-center gap-2 rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-action)] px-4 py-3 text-xs font-extrabold text-white transition-all hover:bg-[var(--color-action-hover)]"
           >
-            <FolderOpen size={16} strokeWidth={2} /> Mostrar archivos
-          </button>
+            <FolderOpen size={16} strokeWidth={2} />{t("resultPanel.showFiles")}{" "}</button>
         </div>
       </div>
 
@@ -72,9 +71,7 @@ export function ResultPanel({
       <div className="flex flex-col border-y-2 border-[var(--color-menta-border)] bg-[var(--color-menta-bg)] sm:flex-row">
         {/* Main savings highlight */}
         <div className="flex flex-1 flex-col justify-center border-b-2 border-[var(--color-menta-border)] bg-[var(--color-menta-bg)] p-6 sm:border-b-0 sm:border-r-2">
-          <p className="text-xs font-black uppercase tracking-widest text-[var(--color-menta-text)]">
-            Espacio Ahorrado
-          </p>
+          <p className="text-xs font-black uppercase tracking-widest text-[var(--color-menta-text)]">{t("resultPanel.spaceSaved")}{" "}</p>
           <p className="mt-1 text-5xl font-black tracking-tight text-[var(--color-menta-text)]">
             {formatBytes(totalSaved)}
           </p>
@@ -84,7 +81,7 @@ export function ResultPanel({
             <span className="text-[var(--color-text)]">{formatBytes(convertedTotal)}</span>
             <span className="ml-2 inline-flex items-center gap-0.5 rounded-[22px] border-2 border-[var(--color-menta-border)] bg-[var(--color-control)] px-2 py-0.5 text-xs font-extrabold text-[var(--color-menta-text)]">
               <ArrowDown size={11} strokeWidth={2.5} className="shrink-0" />
-              {savingsPercent.toFixed(1)}%
+              {number(savingsPercent, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
             </span>
           </div>
         </div>
@@ -108,7 +105,7 @@ export function ResultPanel({
                   </p>
                   <div className="flex flex-1 items-center gap-3 text-sm font-bold text-[var(--color-text-dim)]">
                     {result.preservedOriginal ? (
-                      <span className="text-[var(--color-text-secondary)]">Ya estaba optimizada</span>
+                      <span className="text-[var(--color-text-secondary)]">{t("resultPanel.alreadyOptimizedAlt")}</span>
                     ) : result.optimized ? (
                       <>
                         <span className="line-through opacity-70">{formatBytes(result.originalSize)}</span>
@@ -116,11 +113,11 @@ export function ResultPanel({
                         <span className="text-[var(--color-text)]">{formatBytes(finalSize)}</span>
                         <span className="ml-2 inline-flex items-center gap-0.5 rounded-[22px] border-2 border-[var(--color-menta-border)] bg-[var(--color-control)] px-2 py-0.5 text-xs font-extrabold text-[var(--color-menta-text)]">
                           <ArrowDown size={10} strokeWidth={2.5} className="shrink-0" />
-                          {savings.toFixed(1)}%
+                          {number(savings, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
                         </span>
                       </>
                     ) : (
-                      <span className="text-[var(--color-celeste-text)]">{finalSize === result.originalSize ? "El tamaño no cambió" : "El formato elegido pesa más"}</span>
+                      <span className="text-[var(--color-celeste-text)]">{finalSize === result.originalSize ? t("resultPanel.sizeUnchanged") : t("resultPanel.theSelectedFormatIsLarger")}</span>
                     )}
                   </div>
                 </div>
@@ -130,9 +127,7 @@ export function ResultPanel({
                       type="button"
                       onClick={() => onCompare(result)}
                       className="rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] px-3 py-1.5 text-xs font-bold text-[var(--color-celeste-text)] transition-colors hover:border-[var(--color-border-hover)]"
-                    >
-                      Comparar
-                    </button>
+                    >{t("resultPanel.compare")}{" "}</button>
                   )}
                   {result.outputPath && (
                     <button
@@ -140,7 +135,7 @@ export function ResultPanel({
                       onClick={() => onShowFile(result.outputPath!)}
                       className="rounded-[22px] border-2 border-[var(--color-menta-border)] bg-[var(--color-control)] px-3 py-1.5 text-xs font-bold text-[var(--color-menta-text)] transition-colors hover:bg-[var(--color-menta-bg)]"
                     >
-                      Finder
+                      {t("files.show")}
                     </button>
                   )}
                 </div>
@@ -155,24 +150,19 @@ export function ResultPanel({
         <div className="m-4 rounded-[22px] border-2 border-[var(--color-coral-border)] bg-[var(--color-coral-bg)] p-4 sm:m-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs font-bold text-[var(--color-coral-text)]">
-              {failedResults.length}{" "}
-              {failedResults.length === 1
-                ? "imagen tuvo un problema"
-                : "imágenes tuvieron problemas"}
+              {plural("images.failed.other", failedResults.length)}
             </p>
             <button
               type="button"
               onClick={() => onRetryFailed(failedResults.map((r) => r.sourcePath))}
               className="inline-flex items-center gap-1.5 rounded-[22px] border-2 border-[var(--color-coral-border)] bg-[var(--color-control)] px-3 py-1.5 text-xs font-bold text-[var(--color-coral-text)] transition-colors hover:bg-[var(--color-coral-bg)]"
             >
-              <RotateCcw size={13} strokeWidth={2} className="shrink-0" />
-              Intentar de nuevo
-            </button>
+              <RotateCcw size={13} strokeWidth={2} className="shrink-0" />{t("resultPanel.tryAgain")}{" "}</button>
           </div>
           <ul className="mt-2 space-y-1 text-sm leading-5 text-[var(--color-coral-text)]">
             {failedResults.map((r) => (
               <li key={r.sourcePath}>
-                <b>{fileNameFromPath(r.sourcePath)}:</b> {r.error}
+                <b>{fileNameFromPath(r.sourcePath)}:</b> {text(r.error)}
               </li>
             ))}
           </ul>

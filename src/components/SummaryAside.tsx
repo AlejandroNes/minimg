@@ -1,3 +1,5 @@
+import { useTranslation } from "../i18n/useTranslation";
+
 import {
   ArrowRight,
   Check,
@@ -46,16 +48,15 @@ export function SummaryAside({
   onConvert,
   onHideResults,
 }: SummaryAsideProps) {
+  const { t, plural } = useTranslation();
   return (
     <>
       <div data-step="6" data-complete={completed} className="summary-card step-section overflow-hidden">
         {/* Header */}
         <div className="border-b-2 border-[var(--color-celeste-border)] p-5">
-          <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[var(--color-celeste-text)]">
-            Resumen de la tarea
-          </p>
+          <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[var(--color-celeste-text)]">{t("summaryAside.taskSummary")}{" "}</p>
           <div className="mt-3">
-            <StepHeading number={6} completed={completed} title={hasFinished ? "Revisa los resultados" : "Optimizar imágenes"} description="Comprueba las opciones y comienza cuando todo esté preparado." />
+            <StepHeading number={6} completed={completed} title={hasFinished ? t("summaryAside.reviewTheResults") : t("appHeader.optimizeImages")} description={t("summaryAside.checkTheOptionsAndStartWhen")} />
           </div>
         </div>
 
@@ -66,11 +67,11 @@ export function SummaryAside({
               <Images size={16} strokeWidth={2} />
             </span>
             <div className="min-w-0 flex-1">
-              <p>Imágenes</p>
+              <p>{t("watermarkTool.images")}</p>
               <strong>
                 {images.length > 0
-                  ? `${images.length} seleccionadas · ${formatBytes(totalOriginalSize)}`
-                  : "Aún no seleccionaste imágenes"}
+                  ? t("summaryAside.selected", { p0: images.length, p1: formatBytes(totalOriginalSize) })
+                  : t("summaryAside.noImagesSelectedYet")}
               </strong>
             </div>
             {images.length > 0 && (
@@ -85,7 +86,7 @@ export function SummaryAside({
               <FileImage size={16} strokeWidth={2} />
             </span>
             <div className="min-w-0 flex-1">
-              <p>Formato de salida</p>
+              <p>{t("summaryAside.outputFormat")}</p>
               <strong>{selectedFormatLabel}</strong>
               <small>{selectedFormatDesc}</small>
             </div>
@@ -99,7 +100,7 @@ export function SummaryAside({
               <Gauge size={16} strokeWidth={2} />
             </span>
             <div className="min-w-0 flex-1">
-              <p>Optimización</p>
+              <p>{t("summaryAside.optimization")}</p>
               <strong>{selectedModeLabel}</strong>
               <small>{selectedModeDesc}</small>
             </div>
@@ -113,9 +114,9 @@ export function SummaryAside({
               <FolderOpen size={16} strokeWidth={2} />
             </span>
             <div className="min-w-0 flex-1">
-              <p>Carpeta de destino</p>
+              <p>{t("summaryAside.outputFolder")}</p>
               <strong className="truncate">
-                {outputDir ? fileNameFromPath(outputDir) : "Falta seleccionarla"}
+                {outputDir ? fileNameFromPath(outputDir) : t("summaryAside.selectAFolderFirst")}
               </strong>
               {outputDir && (
                 <small className="truncate" title={outputDir}>
@@ -149,12 +150,12 @@ export function SummaryAside({
               <Zap size={18} strokeWidth={2} />
             )}
             {isConverting
-              ? "Optimizando imágenes…"
+              ? t("summaryAside.optimizingImages")
               : images.length === 0
-                ? "Primero añade imágenes"
+                ? t("summaryAside.addImagesFirst")
                 : !outputDir
-                  ? "Selecciona una carpeta"
-                  : `Optimizar ${images.length} ${images.length === 1 ? "imagen" : "imágenes"}`}
+                  ? t("summaryAside.selectAFolder")
+                  : plural("images.optimize.other", images.length)}
             {canConvert && (
               <ArrowRight
                 size={15}
@@ -164,9 +165,7 @@ export function SummaryAside({
             )}
           </button>
           {!canConvert && !isConverting && (
-            <p className="mt-3 text-center text-xs leading-4 text-[var(--color-celeste-text)]">
-              Completa los pasos pendientes para activar el botón.
-            </p>
+            <p className="mt-3 text-center text-xs leading-4 text-[var(--color-celeste-text)]">{t("watermarkTool.completeTheRemainingStepsToEnable")}{" "}</p>
           )}
           {hasFinished && (
             <button
@@ -174,8 +173,7 @@ export function SummaryAside({
               onClick={onHideResults}
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-control)] py-2.5 text-xs font-bold text-[var(--color-celeste-text)] transition-colors hover:bg-[var(--color-celeste-bg)]"
             >
-              <RotateCcw size={13} strokeWidth={2} /> Ocultar resultados
-            </button>
+              <RotateCcw size={13} strokeWidth={2} />{t("summaryAside.hideResults")}{" "}</button>
           )}
         </div>
       </div>
@@ -185,20 +183,15 @@ export function SummaryAside({
         <div className="flex gap-3">
           <LockKeyhole size={17} strokeWidth={2} className="mt-0.5 shrink-0 text-[var(--color-menta-text)]" />
           <div>
-            <p className="text-xs font-extrabold text-[var(--color-menta-text)]">
-              Tus imágenes permanecen en tu equipo
-            </p>
-            <p className="mt-1 text-sm leading-5 text-[var(--color-menta-text)]/80">
-              La aplicación funciona sin subir archivos a internet y nunca modifica los originales.
-            </p>
+            <p className="text-xs font-extrabold text-[var(--color-menta-text)]">{t("summaryAside.yourImagesStayOnYourDevice")}{" "}</p>
+            <p className="mt-1 text-sm leading-5 text-[var(--color-menta-text)]/80">{t("summaryAside.theApplicationWorksWithoutUploadingFiles")}{" "}</p>
           </div>
         </div>
       </div>
 
       {/* Compatible formats */}
       <div className="flex items-center justify-center gap-2 rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] px-3 py-2 text-xs font-bold text-[var(--color-celeste-text)]">
-        <FileImage size={14} strokeWidth={2} /> Compatible con JPG, JPEG, PNG y WebP
-      </div>
+        <FileImage size={14} strokeWidth={2} />{t("summaryAside.supportsJpgJpegPngAndWebp")}{" "}</div>
     </>
   );
 }

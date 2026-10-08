@@ -1,3 +1,5 @@
+import { useTranslation } from "../i18n/useTranslation";
+
 import { useState } from "react";
 import { Check, RotateCcw, Settings } from "lucide-react";
 import type { ActiveTool } from "../types";
@@ -19,6 +21,7 @@ export function AppHeader({
   username?: string;
   busy?: boolean;
 }) {
+  const { t } = useTranslation();
   const [isClearing, setIsClearing] = useState(false);
   const [isCleaned, setIsCleaned] = useState(false);
 
@@ -49,14 +52,12 @@ export function AppHeader({
             <h1 className="text-lg font-black tracking-tight text-[var(--color-text)]">
               {APP_NAME}
             </h1>
-            <p className="mt-0.5 text-xs font-medium text-[var(--color-text-dim)]">
-              Reduce el peso sin complicaciones
-            </p>
+            <p className="mt-0.5 text-xs font-medium text-[var(--color-text-dim)]">{t("appHeader.reduceFileSizesWithEase")}{" "}</p>
           </div>
         </div>
 
         {/* Tool tabs */}
-        <nav aria-label="Herramientas" className="hidden items-center gap-1 rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] p-1 sm:flex">
+        <nav aria-label={t("appHeader.tools")} className="hidden items-center gap-1 rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] p-1 sm:flex">
           <button
             type="button"
             disabled={busy}
@@ -66,9 +67,7 @@ export function AppHeader({
                 ? "border-[var(--color-celeste-border)] bg-[var(--color-control)] text-[var(--color-celeste-text)]"
                 : "border-transparent text-[var(--color-text-dim)] hover:text-[var(--color-text)]"
             }`}
-          >
-            Optimizar imágenes
-          </button>
+          >{t("appHeader.optimizeImages")}{" "}</button>
           <button
             type="button"
             disabled={busy}
@@ -78,29 +77,26 @@ export function AppHeader({
                 ? "border-[var(--color-lila-border)] bg-[var(--color-control)] text-[var(--color-lila-text)]"
                 : "border-transparent text-[var(--color-text-dim)] hover:text-[var(--color-text)]"
             }`}
-          >
-            Marca de agua
-          </button>
+          >{t("watermarkTool.watermark")}{" "}</button>
         </nav>
 
         <div className="flex items-center gap-2">
           {username && (
-            <div className="hidden rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] px-3.5 py-1.5 text-xs font-bold text-[var(--color-celeste-text)] md:block">
-              Hola, {username}
+            <div className="hidden rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] px-3.5 py-1.5 text-xs font-bold text-[var(--color-celeste-text)] md:block">{t("app.greeting", { name: username })}
             </div>
           )}
           <button
             type="button"
             onClick={handleClear}
             disabled={isClearing || busy}
-            aria-label="Limpiar caché y memoria"
-            title="Limpiar caché y memoria de la aplicación"
+            aria-label={t("appHeader.clearCacheAndMemory")}
+            title={t("appHeader.clearTheApplicationSCacheAnd")}
             className="group flex items-center gap-1.5 rounded-[22px] border-2 border-[var(--color-menta-border)] bg-[var(--color-menta-bg)] px-3 py-1.5 text-xs font-bold text-[var(--color-menta-text)] transition-all duration-200 hover:brightness-95 active:scale-95 disabled:pointer-events-none"
           >
             {isCleaned ? (
               <>
                 <Check size={14} strokeWidth={2.5} className="shrink-0 text-[var(--color-menta-text)]" />
-                <span className="hidden sm:inline">¡Todo limpio!</span>
+                <span className="hidden sm:inline">{t("appHeader.allClean")}</span>
               </>
             ) : (
               <>
@@ -111,15 +107,15 @@ export function AppHeader({
                     isClearing ? "animate-spin" : "group-hover:-rotate-90"
                   }`}
                 />
-                <span className="hidden sm:inline">Limpiar caché</span>
+                <span className="hidden sm:inline">{t("appHeader.clearCache")}</span>
               </>
             )}
           </button>
           <button
             type="button"
             onClick={onOpenSettings}
-            aria-label="Abrir configuración"
-            title="Configuración"
+            aria-label={t("appHeader.openSettings")}
+            title={t("appHeader.settings")}
             className="grid size-10 place-items-center rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] text-[var(--color-celeste-text)] transition-colors hover:border-[var(--color-border-hover)]"
           >
             <Settings size={18} strokeWidth={2} />
@@ -128,7 +124,7 @@ export function AppHeader({
       </div>
 
       {/* Mobile tool tabs */}
-      <nav aria-label="Herramientas" className="flex border-t-2 border-[var(--color-celeste-border)] sm:hidden">
+      <nav aria-label={t("appHeader.tools")} className="flex border-t-2 border-[var(--color-celeste-border)] sm:hidden">
         <button
           type="button"
           disabled={busy}
@@ -137,9 +133,7 @@ export function AppHeader({
               ? "border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] text-[var(--color-celeste-text)]"
               : "border-transparent text-[var(--color-text-dim)]"
             }`}
-        >
-          Optimizar
-        </button>
+        >{t("appHeader.optimize")}{" "}</button>
         <button
           type="button"
           disabled={busy}
@@ -148,9 +142,7 @@ export function AppHeader({
               ? "border-[var(--color-lila-border)] bg-[var(--color-lila-bg)] text-[var(--color-lila-text)]"
               : "border-transparent text-[var(--color-text-dim)]"
             }`}
-        >
-          Marca de agua
-        </button>
+        >{t("watermarkTool.watermark")}{" "}</button>
       </nav>
     </header>
   );

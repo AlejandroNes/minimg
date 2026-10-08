@@ -1,3 +1,4 @@
+import { loadLanguage, type Language } from "./i18n/language.ts";
 import type { WatermarkPosition } from "./types";
 
 export type Theme = "light" | "dark" | "system";
@@ -10,6 +11,7 @@ export interface WatermarkDefaults {
 }
 
 export interface AppSettings {
+  language: Language;
   theme: Theme;
   username: string;
   soundOnFinish: boolean;
@@ -20,6 +22,7 @@ export const SETTINGS_KEY = "image-compressor-settings-v1";
 export const PREFERENCES_KEY = "image-compressor-preferences-v1";
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  language: "es",
   theme: "system",
   username: "",
   soundOnFinish: true,
@@ -41,6 +44,7 @@ export function loadSettings(): AppSettings {
     const validNumber = (item: unknown, min: number, max: number, fallback: number) =>
       typeof item === "number" && Number.isFinite(item) && item >= min && item <= max ? Math.round(item) : fallback;
     return {
+      language: loadLanguage(),
       theme: ["light", "dark", "system"].includes(stored.theme as string) ? stored.theme as Theme : DEFAULT_SETTINGS.theme,
       username: typeof stored.username === "string" ? stored.username : DEFAULT_SETTINGS.username,
       soundOnFinish: typeof stored.soundOnFinish === "boolean" ? stored.soundOnFinish : DEFAULT_SETTINGS.soundOnFinish,
@@ -52,7 +56,7 @@ export function loadSettings(): AppSettings {
       },
     };
   } catch {
-    return DEFAULT_SETTINGS;
+    return { ...DEFAULT_SETTINGS, language: loadLanguage() };
   }
 }
 

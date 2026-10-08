@@ -1,3 +1,4 @@
+use crate::errors::app_error;
 use std::{
     fs::File,
     io::{BufReader, Read},
@@ -18,39 +19,39 @@ static IMAGE_WORK: Mutex<()> = Mutex::new(());
 pub fn image_work() -> Result<MutexGuard<'static, ()>, String> {
     IMAGE_WORK
         .lock()
-        .map_err(|_| "No se pudo reservar memoria para procesar la imagen".into())
+        .map_err(|_| app_error!("memory_unavailable").into())
 }
 
 pub fn validate_batch(paths: &[String]) -> Result<(), String> {
     if paths.len() > MAX_BATCH_IMAGES {
-        return Err("Selecciona como máximo 10 000 imágenes por lote".into());
+        return Err(app_error!("batch_too_large").into());
     }
     Ok(())
 }
 
 pub fn validate_dimensions(width: u32, height: u32) -> Result<(), String> {
     if width == 0 || height == 0 || u64::from(width) * u64::from(height) > MAX_IMAGE_PIXELS {
-        return Err("La imagen debe tener dimensiones válidas y no superar 100 megapíxeles".into());
+        return Err(app_error!("dimensions_invalid").into());
     }
     Ok(())
 }
 
 pub fn directory(path: &Path) -> Result<PathBuf, String> {
     if !path.is_absolute() {
-        return Err("La carpeta debe tener una ruta absoluta".into());
+        return Err(app_error!("directory_relative").into());
     }
     let path = path
         .canonicalize()
-        .map_err(|_| "La carpeta no existe o no es válida")?;
+        .map_err(|_| app_error!("directory_invalid"))?;
     if !path.is_dir() {
-        return Err("La ruta no corresponde a una carpeta".into());
+        return Err(app_error!("not_directory").into());
     }
     Ok(path)
 }
 
 pub fn open_image_file(path: &Path) -> Result<File, String> {
     if !path.is_absolute() {
-        return Err("La imagen debe tener una ruta absoluta".into());
+        return Err(app_error!("image_relative").into());
     }
     let extension = path
         .extension()
@@ -60,22 +61,22 @@ pub fn open_image_file(path: &Path) -> Result<File, String> {
         .iter()
         .any(|value| extension.eq_ignore_ascii_case(value))
     {
-        return Err("Formato no compatible: selecciona JPG, JPEG, PNG o WebP".into());
+        return Err(app_error!("format_unsupported").into());
     }
     let check = |metadata: std::fs::Metadata| {
         if !metadata.is_file() {
-            return Err("La imagen no es un archivo regular".to_string());
+            return Err(app_error!("not_file"));
         }
         if metadata.len() > MAX_INPUT_BYTES {
-            return Err("La imagen supera el límite de 512 MB".to_string());
+            return Err(app_error!("file_too_large"));
         }
         Ok(())
     };
-    check(std::fs::metadata(path).map_err(|error| format!("No se pudo leer la imagen: {error}"))?)?;
-    let file = File::open(path).map_err(|error| format!("No se pudo abrir la imagen: {error}"))?;
+    check(std::fs::metadata(path).map_err(|error| app_error!("image_read", detail: error))?)?;
+    let file = File::open(path).map_err(|error| app_error!("image_open", detail: error))?;
     check(
         file.metadata()
-            .map_err(|error| format!("No se pudo comprobar la imagen: {error}"))?,
+            .map_err(|error| app_error!("image_inspect", detail: error))?,
     )?;
     Ok(file)
 }
@@ -83,31 +84,53 @@ pub fn open_image_file(path: &Path) -> Result<File, String> {
 pub fn image_reader(path: &Path) -> Result<ImageReader<BufReader<File>>, String> {
     let mut reader = ImageReader::new(BufReader::new(open_image_file(path)?))
         .with_guessed_format()
-        .map_err(|error| format!("Imagen inválida: {error}"))?;
+        .map_err(|error| app_error!("image_invalid", detail: error))?;
     if !matches!(
         reader.format(),
         Some(ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::WebP)
     ) {
-        return Err("El contenido del archivo no es una imagen JPG, PNG o WebP".into());
+        return Err(app_error!("content_unsupported").into());
     }
     reader.limits(image::Limits::default());
     Ok(reader)
 }
 
 pub fn inspect_image(path: &Path) -> Result<(u64, u32, u32), String> {
+    let (size, _, _, width, height) = inspect_display_image(path)?;
+    Ok((size, width, height))
+}
+
+// Return display dimensions and encoded dimensions without decoding the pixels.
+pub fn inspect_display_image(path: &Path) -> Result<(u64, u32, u32, u32, u32), String> {
     let reader = image_reader(path)?;
     let size = std::fs::metadata(path)
         .map_err(|error| error.to_string())?
         .len();
-    let decoder = reader
+    let mut decoder = reader
         .into_decoder()
-        .map_err(|error| format!("Imagen inválida: {error}"))?;
+        .map_err(|error| app_error!("image_invalid", detail: error))?;
     let (width, height) = decoder.dimensions();
     validate_dimensions(width, height)?;
     if decoder.total_bytes() > MAX_INPUT_BYTES {
-        return Err("La imagen decodificada supera el límite de 512 MB".into());
+        return Err(app_error!("decoded_too_large").into());
     }
-    Ok((size, width, height))
+    use image::metadata::Orientation;
+    let orientation = decoder
+        .orientation()
+        .map_err(|error| app_error!("orientation_read", detail: error))?;
+    let swapped = matches!(
+        orientation,
+        Orientation::Rotate90
+            | Orientation::Rotate270
+            | Orientation::Rotate90FlipH
+            | Orientation::Rotate270FlipH
+    );
+    let (display_width, display_height) = if swapped {
+        (height, width)
+    } else {
+        (width, height)
+    };
+    Ok((size, display_width, display_height, width, height))
 }
 
 pub fn read_image_bytes(path: &Path) -> Result<Vec<u8>, String> {
@@ -116,9 +139,9 @@ pub fn read_image_bytes(path: &Path) -> Result<Vec<u8>, String> {
     open_image_file(path)?
         .take(MAX_INPUT_BYTES + 1)
         .read_to_end(&mut bytes)
-        .map_err(|error| format!("No se pudo leer la imagen: {error}"))?;
+        .map_err(|error| app_error!("image_read", detail: error))?;
     if bytes.len() as u64 > MAX_INPUT_BYTES {
-        return Err("La imagen supera el límite de 512 MB".into());
+        return Err(app_error!("file_too_large").into());
     }
     let reader = ImageReader::new(std::io::Cursor::new(&bytes))
         .with_guessed_format()
@@ -127,15 +150,15 @@ pub fn read_image_bytes(path: &Path) -> Result<Vec<u8>, String> {
         reader.format(),
         Some(ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::WebP)
     ) {
-        return Err("El archivo ya no contiene una imagen compatible".into());
+        return Err(app_error!("content_changed").into());
     }
     let decoder = reader
         .into_decoder()
-        .map_err(|error| format!("Imagen inválida: {error}"))?;
+        .map_err(|error| app_error!("image_invalid", detail: error))?;
     let (width, height) = decoder.dimensions();
     validate_dimensions(width, height)?;
     if decoder.total_bytes() > MAX_INPUT_BYTES {
-        return Err("La imagen decodificada supera el límite de 512 MB".into());
+        return Err(app_error!("decoded_too_large").into());
     }
     drop(decoder);
     Ok(bytes)
@@ -173,7 +196,11 @@ mod tests {
         std::fs::create_dir_all(&dir)?;
         let path = dir.join("large.png");
         File::create(&path)?.set_len(MAX_INPUT_BYTES + 1)?;
-        assert!(open_image_file(&path).unwrap_err().contains("512 MB"));
+        assert!(
+            open_image_file(&path)
+                .unwrap_err()
+                .contains("file_too_large")
+        );
         std::fs::remove_dir_all(dir)?;
         Ok(())
     }

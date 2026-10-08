@@ -2,7 +2,7 @@
   "name": "minimg",
   "private": true,
   "homepage": "https://nesvatek.com/products/minimg/",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Optimización, conversión, redimensionado y marcas de agua para imágenes, sin conexión.",
   "author": "Nesvatek",
   "type": "module",

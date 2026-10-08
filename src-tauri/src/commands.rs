@@ -1,3 +1,4 @@
+use crate::errors::{AppError, app_error};
 use std::{
     io::{Cursor, Write},
     path::PathBuf,
@@ -28,6 +29,8 @@ pub struct ImageInfo {
     name: String,
     width: u32,
     height: u32,
+    encoded_width: u32,
+    encoded_height: u32,
     size: u64,
 }
 
@@ -150,7 +153,7 @@ pub struct ConversionResult {
     pub preserved_original: bool,
     pub optimized: bool,
     pub success: bool,
-    pub error: Option<String>,
+    pub error: Option<AppError>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -173,7 +176,7 @@ impl ConversionState {
     fn begin(&self) -> Result<ActiveConversion, String> {
         self.active
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .map_err(|_| "Ya hay un procesamiento de imágenes en curso".to_string())?;
+            .map_err(|_| app_error!("processing_busy"))?;
         self.cancelled.store(false, Ordering::Release);
         Ok(ActiveConversion(self.active.clone()))
     }
@@ -182,7 +185,7 @@ impl ConversionState {
 fn validate_conversion_request(request: &ConversionRequest) -> Result<(), String> {
     security::validate_batch(&request.paths)?;
     if request.resize_width == Some(0) || request.resize_height == Some(0) {
-        return Err("El tamaño de redimensionado debe ser mayor que cero".into());
+        return Err(app_error!("resize_invalid").into());
     }
     if let (Some(width), Some(height)) = (request.resize_width, request.resize_height) {
         security::validate_dimensions(width, height)?;
@@ -192,7 +195,7 @@ fn validate_conversion_request(request: &ConversionRequest) -> Result<(), String
             .target_size_kb
             .is_some_and(|value| value > u64::MAX / 1024)
     {
-        return Err("El peso objetivo no es válido".into());
+        return Err(app_error!("target_size_invalid").into());
     }
     Ok(())
 }
@@ -207,7 +210,7 @@ fn validate_watermark_request(request: &WatermarkRequest) -> Result<(), String> 
             .flatten()
             .any(|value| !value.is_finite() || !(0.0..=100.0).contains(&value))
     {
-        return Err("El tamaño, la opacidad o la posición de la marca no son válidos".into());
+        return Err(app_error!("watermark_invalid").into());
     }
     Ok(())
 }
@@ -233,9 +236,34 @@ fn append_error_log(output_dir: &std::path::Path, source: &str, error: &str) {
             .take(2048)
             .collect::<String>()
     };
-    let error = error
-        .replace(source, &name)
-        .replace(&output_dir.to_string_lossy().to_string(), "[destino]");
+    // Redact decoded values before serializing: JSON escaping must not hide
+    // source/output paths from the redaction (especially on Windows).
+    fn redact(value: &mut serde_json::Value, source: &str, name: &str, output: &str) {
+        match value {
+            serde_json::Value::String(text) => {
+                *text = text.replace(source, name).replace(output, "[output]");
+            }
+            serde_json::Value::Object(fields) => {
+                for value in fields.values_mut() {
+                    redact(value, source, name, output);
+                }
+            }
+            serde_json::Value::Array(values) => {
+                for value in values {
+                    redact(value, source, name, output);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut diagnostic = crate::errors::diagnostic(error.to_string());
+    redact(
+        &mut diagnostic,
+        source,
+        &name,
+        &output_dir.to_string_lossy(),
+    );
+    let error = diagnostic.to_string();
     if let Ok(mut log) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -246,7 +274,7 @@ fn append_error_log(output_dir: &std::path::Path, source: &str, error: &str) {
 }
 
 #[tauri::command]
-pub async fn inspect_images(paths: Vec<String>) -> Result<Vec<ImageInfo>, String> {
+pub async fn inspect_images(paths: Vec<String>) -> Result<Vec<ImageInfo>, AppError> {
     security::validate_batch(&paths)?;
     tauri::async_runtime::spawn_blocking(move || {
         paths
@@ -254,7 +282,8 @@ pub async fn inspect_images(paths: Vec<String>) -> Result<Vec<ImageInfo>, String
             .map(|path_string| {
                 let path = PathBuf::from(&path_string);
                 let _work = security::image_work()?;
-                let (size, width, height) = security::inspect_image(&path)?;
+                let (size, width, height, encoded_width, encoded_height) =
+                    security::inspect_display_image(&path)?;
                 let name = path
                     .file_name()
                     .and_then(|value| value.to_str())
@@ -270,30 +299,34 @@ pub async fn inspect_images(paths: Vec<String>) -> Result<Vec<ImageInfo>, String
                     name,
                     width,
                     height,
+                    encoded_width,
+                    encoded_height,
                     size,
                 })
             })
-            .collect()
+            .collect::<Result<Vec<_>, String>>()
     })
     .await
-    .map_err(|error| format!("Falló la lectura de imágenes: {error}"))?
+    .map_err(|error| app_error!("inspection_failed", detail: error))?
+    .map_err(|error: String| AppError::from(error))
 }
 
 #[tauri::command]
-pub async fn get_thumbnail(path: String) -> Result<Response, String> {
+pub async fn get_thumbnail(path: String) -> Result<Response, AppError> {
     tauri::async_runtime::spawn_blocking(move || {
         let path = PathBuf::from(path);
         let _work = security::image_work()?;
-        let image = processor::load_image(&path, false)?;
+        let image = processor::load_image(&path, true)?;
         let thumbnail = image.thumbnail(160, 160);
         let mut bytes = Vec::new();
         thumbnail
             .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
-            .map_err(|error| format!("No se pudo codificar la miniatura: {error}"))?;
+            .map_err(|error| app_error!("thumbnail_encode", detail: error))?;
         Ok(Response::new(bytes))
     })
     .await
-    .map_err(|error| format!("Falló la miniatura: {error}"))?
+    .map_err(|error| app_error!("thumbnail_failed", detail: error))?
+    .map_err(|error: String| AppError::from(error))
 }
 
 #[tauri::command]
@@ -301,9 +334,9 @@ pub async fn convert_images(
     request: ConversionRequest,
     on_progress: Channel<ConversionProgress>,
     state: tauri::State<'_, ConversionState>,
-) -> Result<Vec<ConversionResult>, String> {
+) -> Result<Vec<ConversionResult>, AppError> {
     if request.paths.is_empty() {
-        return Err("No hay imágenes para convertir".to_string());
+        return Err(app_error!("conversion_empty").into());
     }
     validate_conversion_request(&request)?;
     let active = state.begin()?;
@@ -361,11 +394,11 @@ pub async fn convert_images(
                         quality_used: None,
                         visual_score: None,
                         visual_rating: None,
-                        output_format: "Sin generar".to_string(),
+                        output_format: "not_generated".to_string(),
                         preserved_original: false,
                         optimized: false,
                         success: false,
-                        error: Some(error),
+                        error: Some(error.into()),
                     }
                 });
 
@@ -383,7 +416,8 @@ pub async fn convert_images(
         Ok(results)
     })
     .await
-    .map_err(|error| format!("Falló el procesamiento por lotes: {error}"))?
+    .map_err(|error| app_error!("batch_failed", detail: error))?
+    .map_err(|error: String| AppError::from(error))
 }
 
 #[tauri::command]
@@ -391,9 +425,9 @@ pub async fn apply_watermark(
     request: WatermarkRequest,
     on_progress: Channel<ConversionProgress>,
     state: tauri::State<'_, ConversionState>,
-) -> Result<Vec<ConversionResult>, String> {
+) -> Result<Vec<ConversionResult>, AppError> {
     if request.paths.is_empty() {
-        return Err("No hay imágenes para marcar".to_string());
+        return Err(app_error!("watermark_empty").into());
     }
     validate_watermark_request(&request)?;
     let active = state.begin()?;
@@ -404,7 +438,7 @@ pub async fn apply_watermark(
         let watermark_path = PathBuf::from(&request.watermark_path);
         let watermark = {
             let _work = security::image_work()?;
-            processor::load_image(&watermark_path, false)?
+            processor::load_image(&watermark_path, true)?
         };
         let total = request.paths.len();
 
@@ -455,11 +489,11 @@ pub async fn apply_watermark(
                         quality_used: None,
                         visual_score: None,
                         visual_rating: None,
-                        output_format: "Sin generar".to_string(),
+                        output_format: "not_generated".to_string(),
                         preserved_original: false,
                         optimized: false,
                         success: false,
-                        error: Some(error),
+                        error: Some(error.into()),
                     }
                 });
 
@@ -477,7 +511,8 @@ pub async fn apply_watermark(
         Ok(results)
     })
     .await
-    .map_err(|error| format!("Falló la aplicación de marcas: {error}"))?
+    .map_err(|error| app_error!("watermark_failed", detail: error))?
+    .map_err(|error: String| AppError::from(error))
 }
 
 #[tauri::command]
@@ -486,7 +521,7 @@ pub fn cancel_conversion(state: tauri::State<'_, ConversionState>) {
 }
 
 #[tauri::command]
-pub async fn read_file_bytes(path: String) -> Result<Response, String> {
+pub async fn read_file_bytes(path: String) -> Result<Response, AppError> {
     tauri::async_runtime::spawn_blocking(move || {
         let path = PathBuf::from(path);
         let _work = security::image_work()?;
@@ -494,24 +529,42 @@ pub async fn read_file_bytes(path: String) -> Result<Response, String> {
         Ok(Response::new(bytes))
     })
     .await
-    .map_err(|error| format!("Falló al leer el archivo: {error}"))?
+    .map_err(|error| app_error!("read_failed", detail: error))?
+    .map_err(|error: String| AppError::from(error))
 }
 
 #[tauri::command]
-pub async fn open_output_directory(app: tauri::AppHandle, path: String) -> Result<(), String> {
+pub async fn open_output_directory(app: tauri::AppHandle, path: String) -> Result<(), AppError> {
     tauri::async_runtime::spawn_blocking(move || {
         let path = security::directory(std::path::Path::new(&path))?;
         app.opener()
             .open_path(path.to_string_lossy(), None::<&str>)
-            .map_err(|error| format!("No se pudo abrir la carpeta: {error}"))
+            .map_err(|error| app_error!("directory_open", detail: error))
     })
     .await
     .map_err(|error| error.to_string())?
+    .map_err(|error: String| AppError::from(error))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn error_log_redacts_paths_inside_structured_diagnostics()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let dir = std::env::temp_dir().join(format!("minimg-log-{}", std::process::id()));
+        std::fs::create_dir_all(&dir)?;
+        let source = dir.join("image-with-quote\".jpg");
+        let error = app_error!("file_read", context: source.display(), detail: "Permission denied");
+        append_error_log(&dir, &source.to_string_lossy(), &error);
+        let log = std::fs::read_to_string(dir.join("MinIMG-errors.log"))?;
+        assert!(log.contains("file_read"));
+        assert!(log.contains("Permission denied"));
+        assert!(!log.contains(&dir.to_string_lossy().to_string()));
+        std::fs::remove_dir_all(dir)?;
+        Ok(())
+    }
 
     #[test]
     fn rejects_overflowing_target_and_invalid_resize() {

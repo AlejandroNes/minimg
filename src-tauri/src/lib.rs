@@ -1,4 +1,5 @@
 mod commands;
+mod errors;
 mod processor;
 mod security;
 mod updates;

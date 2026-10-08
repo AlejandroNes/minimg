@@ -1,3 +1,6 @@
+import type { MessageValue } from "./i18n/index";
+import { useTranslation } from "./i18n/useTranslation";
+import { message, renderMessage } from "./i18n/index";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -20,8 +23,7 @@ import {
 } from "lucide-react";
 import { fileNameFromPath, formatBytes } from "./formatters";
 import { StepHeading } from "./components/StepHeading";
-import { useSettings } from "./hooks/useSettings";
-import { playFinishSound } from "./settings";
+import { type AppSettings, playFinishSound } from "./settings";
 import { loadImageItems } from "./imageLoading";
 import { getProcessingActivity as getImageActivity, trackImageTask } from "./updater/imageActivity";
 import type {
@@ -61,8 +63,10 @@ function previewPosition(
   return { ...horizontal, ...vertical };
 }
 
-export function WatermarkTool() {
-  const { settings } = useSettings();
+export function WatermarkTool({ settings }: { settings: AppSettings }) {
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const { t, plural, number } = useTranslation();
   const [images, setImages] = useState<ImageItem[]>([]);
   const [watermarkPath, setWatermarkPath] = useState("");
   const [watermarkUrl, setWatermarkUrl] = useState("");
@@ -83,7 +87,7 @@ export function WatermarkTool() {
   const [isDragging, setIsDragging] = useState(false);
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<ConversionResult[]>([]);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<MessageValue>(null);
   const urls = useRef(new Set<string>());
   const imagesRef = useRef(images); imagesRef.current = images;
   const mounted = useRef(true);
@@ -95,7 +99,6 @@ export function WatermarkTool() {
   const previewRef = useRef<HTMLDivElement>(null);
   const [isDraggingMark, setIsDraggingMark] = useState(false);
   const preview = useMemo(() => images[0], [images]);
-
 
   useEffect(() => {
     mounted.current = true;
@@ -127,9 +130,9 @@ export function WatermarkTool() {
         imagesRef.current = updated;
         setImages(updated); setResults([]); setProgress(0);
       }
-      if (loaded.errors.length) setNotice(`Algunos archivos no se pudieron añadir. ${loaded.errors.slice(0, 3).join(" ")}`);
+      if (loaded.errors.length) setNotice(message("watermarkTool.someFilesCouldNotBeAdded", { p0: loaded.errors.slice(0, 3).flatMap(error => [error, " "]) }));
     } catch (error) {
-      if (current()) setNotice(`No pudimos leer las imágenes. ${String(error)}`);
+      if (current()) setNotice(message("watermarkTool.weCouldNotReadTheImages", { p0: error as MessageValue }));
     } finally {
       loading.current = false;
       if (current()) setIsLoading(false);
@@ -152,7 +155,7 @@ export function WatermarkTool() {
       .then((cleanup) => {
         if (disposed) cleanup();
         else unlisten = cleanup;
-      }).catch((error) => { if (!disposed) setNotice(`No pudimos activar el arrastre. ${String(error)}`); });
+      }).catch((error) => { if (!disposed) setNotice(message("watermarkTool.weCouldNotEnableDragAnd", { p0: error as MessageValue })); });
     return () => {
       disposed = true;
       unlisten?.();
@@ -163,9 +166,9 @@ export function WatermarkTool() {
     if (dialog.current || loading.current || applying.current || getImageActivity()) return;
     dialog.current = true;
     try {
-      const selected = await open({ multiple: true, filters: [{ name: "Imágenes", extensions: EXTENSIONS }] });
+      const selected = await open({ multiple: true, filters: [{ name: t("watermarkTool.images"), extensions: EXTENSIONS }] });
       if (mounted.current && selected) await processPaths(Array.isArray(selected) ? selected : [selected]);
-    } catch (error) { if (mounted.current) setNotice(`No pudimos abrir la selección. ${String(error)}`); }
+    } catch (error) { if (mounted.current) setNotice(message("watermarkTool.weCouldNotOpenTheFile", { p0: error as MessageValue })); }
     finally { dialog.current = false; }
   }
 
@@ -173,7 +176,7 @@ export function WatermarkTool() {
     if (dialog.current || loading.current || applying.current || getImageActivity()) return;
     dialog.current = true;
     try {
-      const selected = await open({ multiple: false, filters: [{ name: "Marca de agua", extensions: EXTENSIONS }] });
+      const selected = await open({ multiple: false, filters: [{ name: t("watermarkTool.watermark"), extensions: EXTENSIONS }] });
       if (!mounted.current || typeof selected !== "string") return;
       const token = generation.current;
       const bytes = await trackImageTask(() => invoke<ArrayBuffer>("get_thumbnail", { path: selected }));
@@ -181,7 +184,7 @@ export function WatermarkTool() {
       const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
       if (watermarkUrl) { URL.revokeObjectURL(watermarkUrl); urls.current.delete(watermarkUrl); }
       urls.current.add(url); setWatermarkUrl(url); setWatermarkPath(selected); setResults([]); setProgress(0);
-    } catch (error) { if (mounted.current) setNotice(`No pudimos leer la marca. ${String(error)}`); }
+    } catch (error) { if (mounted.current) setNotice(message("watermarkTool.weCouldNotReadTheWatermark", { p0: error as MessageValue })); }
     finally { dialog.current = false; }
   }
 
@@ -194,7 +197,7 @@ export function WatermarkTool() {
         setOutputDir(selected);
         if (selected !== outputDir) { setResults([]); setProgress(0); }
       }
-    } catch (error) { if (mounted.current) setNotice(`No pudimos elegir la carpeta. ${String(error)}`); }
+    } catch (error) { if (mounted.current) setNotice(message("watermarkTool.weCouldNotSelectTheFolder", { p0: error as MessageValue })); }
     finally { dialog.current = false; }
   }
 
@@ -244,12 +247,12 @@ export function WatermarkTool() {
       setProgress((completed.length / request.paths.length) * 100);
       const failed = completed.filter((result) => !result.success);
       if (completed.length < request.paths.length) {
-        setNotice(`Proceso cancelado. Se completaron ${completed.length} de ${request.paths.length} imágenes.${failed.length ? ` ${failed.length} con errores. ${failed[0].error}` : ""}`);
+        setNotice(message("watermarkTool.processCancelledOfImagesCompleted", { p0: completed.length, p1: request.paths.length, p2: failed.length ? message("watermarkTool.withErrors", { p0: failed.length, p1: failed[0].error }) : "" }));
       } else if (failed.length) {
-        setNotice(`${failed.length} imágenes tuvieron problemas. ${failed.slice(0, 3).map((item) => `${fileNameFromPath(item.sourcePath)}: ${item.error}`).join(" ")}`);
-      } else if (settings.soundOnFinish) { playFinishSound(); }
+        setNotice(message("watermarkTool.imagesHadProblems", { p0: failed.length, p1: failed.slice(0, 3).flatMap(item => [`${fileNameFromPath(item.sourcePath)}: `, item.error, " "]) }));
+      } else if (settingsRef.current.soundOnFinish) { playFinishSound(); }
     } catch (error) {
-      if (mounted.current) setNotice(`No se pudieron aplicar las marcas. ${String(error)}`);
+      if (mounted.current) setNotice(message("watermarkTool.theWatermarksCouldNotBeApplied", { p0: error as MessageValue }));
     } finally {
       applying.current = false; cancelling.current = false;
       if (mounted.current) { setIsApplying(false); setIsCancelling(false); }
@@ -262,7 +265,7 @@ export function WatermarkTool() {
     try { await invoke("cancel_conversion"); }
     catch (error) {
       cancelling.current = false;
-      if (mounted.current) { setIsCancelling(false); setNotice(`No pudimos detener el proceso. ${String(error)}`); }
+      if (mounted.current) { setIsCancelling(false); setNotice(message("watermarkTool.weCouldNotStopTheProcess", { p0: error as MessageValue })); }
     }
   }
 
@@ -271,7 +274,7 @@ export function WatermarkTool() {
     try {
       if (paths.length) await revealItemInDir(paths);
       else if (outputDir) await invoke("open_output_directory", { path: outputDir });
-    } catch (error) { if (mounted.current) setNotice(`No pudimos mostrar los resultados. ${String(error)}`); }
+    } catch (error) { if (mounted.current) setNotice(message("watermarkTool.weCouldNotShowTheResults", { p0: error as MessageValue })); }
   }
 
   function startNewBatch() {
@@ -309,8 +312,8 @@ export function WatermarkTool() {
     min: number;
     max: number;
   }[] = [
-      { label: "Tamaño", value: sizePercent, setValue: setSizePercent, unit: "%", min: 5, max: 80 },
-      { label: "Opacidad", value: opacity, setValue: setOpacity, unit: "%", min: 5, max: 100 },
+      { label: t("watermarkTool.size"), value: sizePercent, setValue: setSizePercent, unit: "%", min: 5, max: 80 },
+      { label: t("watermarkTool.opacity"), value: opacity, setValue: setOpacity, unit: "%", min: 5, max: 100 },
     ];
 
   return (
@@ -323,12 +326,12 @@ export function WatermarkTool() {
             className="animate-slide-up mb-6 flex items-start gap-3 rounded-[22px] border-2 border-[var(--color-amarillo-border)] bg-[var(--color-amarillo-bg)] px-4 py-3.5 text-sm text-[var(--color-amarillo-text)]"
           >
             <CircleAlert size={18} strokeWidth={2} className="mt-0.5 shrink-0 text-[var(--color-amarillo-text)]" />
-            <span className="flex-1 font-medium leading-5">{notice}</span>
+            <span className="flex-1 font-medium leading-5">{renderMessage(notice)}</span>
             <button
               type="button"
               onClick={() => setNotice(null)}
               className="rounded-[22px] p-1 text-[var(--color-amarillo-text)] hover:bg-[var(--color-amarillo-border)]/30"
-              aria-label="Cerrar mensaje"
+              aria-label={t("app.dismissMessage")}
             >
               <X size={17} strokeWidth={2} />
             </button>
@@ -341,8 +344,8 @@ export function WatermarkTool() {
             number={1}
             completed={images.length > 0}
             icon={<Images size={19} strokeWidth={2} />}
-            title="Añade las imágenes"
-            description="Selecciona todas las imágenes que recibirán la misma marca."
+            title={t("app.addImages")}
+            description={t("watermarkTool.selectAllTheImagesThatWill")}
           />
           <button
             type="button"
@@ -359,7 +362,7 @@ export function WatermarkTool() {
             ) : (
               <>
                 <ImagePlus size={20} strokeWidth={2} className="mr-2" />
-                {isDragging ? "Suelta las imágenes aquí" : "Seleccionar o arrastrar imágenes"}
+                {isDragging ? t("watermarkTool.dropImagesHere") : t("watermarkTool.selectOrDragImages")}
               </>
             )}
           </button>
@@ -367,7 +370,7 @@ export function WatermarkTool() {
             <div className="mt-3">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs font-bold text-[var(--color-text)]">
-                  {images.length} imágenes ·{" "}
+                  {plural("images.count.other", images.length)} ·{" "}
                   {formatBytes(images.reduce((sum, image) => sum + image.size, 0))}
                 </p>
                 <button
@@ -376,9 +379,7 @@ export function WatermarkTool() {
                   onClick={startNewBatch}
                   className="inline-flex items-center rounded-[22px] border-2 border-[var(--color-coral-border)] bg-[var(--color-control)] px-2.5 py-1 text-xs font-bold text-[var(--color-coral-text)] transition-colors hover:bg-[var(--color-coral-bg)]"
                 >
-                  <Trash2 size={13} strokeWidth={2} className="mr-1 inline align-middle" />
-                  Quitar todas
-                </button>
+                  <Trash2 size={13} strokeWidth={2} className="mr-1 inline align-middle" />{t("watermarkTool.removeAll")}{" "}</button>
               </div>
               <ul className="mt-3 max-h-44 space-y-1 overflow-y-auto rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-control)] p-2">
                 {images.map((image) => (
@@ -399,7 +400,7 @@ export function WatermarkTool() {
                       disabled={isApplying || isLoading}
                       onClick={() => removeImage(image.path)}
                       className="grid size-7 shrink-0 place-items-center rounded-[22px] text-[var(--color-text-dim)] hover:bg-[var(--color-coral-bg)] hover:text-[var(--color-coral-text)] focus-visible:opacity-100"
-                      aria-label={`Quitar ${image.name}`}
+                      aria-label={t("watermarkTool.remove", { p0: image.name })}
                     >
                       <X size={14} strokeWidth={2} />
                     </button>
@@ -416,8 +417,8 @@ export function WatermarkTool() {
             number={2}
             completed={!!watermarkPath}
             icon={<Upload size={19} strokeWidth={2} />}
-            title="Elige tu marca de agua"
-            description="Añade un logotipo o marca en formato PNG transparente."
+            title={t("watermarkTool.chooseYourWatermark")}
+            description={t("watermarkTool.addALogoOrWatermarkAs")}
           />
           <button
             type="button"
@@ -430,9 +431,9 @@ export function WatermarkTool() {
             </span>
             <span className="min-w-0">
               <b className="block text-xs text-[var(--color-text)]">
-                {watermarkPath ? fileNameFromPath(watermarkPath) : "Seleccionar logo o marca"}
+                {watermarkPath ? fileNameFromPath(watermarkPath) : t("watermarkTool.selectALogoOrWatermark")}
               </b>
-              <small className="text-[var(--color-lila-text)]">PNG transparente recomendado</small>
+              <small className="text-[var(--color-lila-text)]">{t("watermarkTool.transparentPngRecommended")}</small>
             </span>
           </button>
         </section>
@@ -443,8 +444,8 @@ export function WatermarkTool() {
             number={3}
             completed={!!outputDir}
             icon={<FolderOpen size={19} strokeWidth={2} />}
-            title="Guarda los resultados"
-            description="Selecciona la carpeta donde se guardarán las imágenes con marca."
+            title={t("watermarkTool.saveTheResults")}
+            description={t("watermarkTool.selectTheFolderWhereWatermarkedImages")}
           />
           <button
             type="button"
@@ -454,12 +455,10 @@ export function WatermarkTool() {
           >
             <FolderOpen size={18} strokeWidth={2} className="text-[var(--color-celeste-text)]" />
             <span className="truncate text-xs font-bold text-[var(--color-text)]">
-              {outputDir || "Seleccionar carpeta de destino"}
+              {outputDir || t("watermarkTool.selectOutputFolder")}
             </span>
           </button>
-          <label className="mt-4 block text-xs font-bold text-[var(--color-text)]">
-            Sufijo
-            <input
+          <label className="mt-4 block text-xs font-bold text-[var(--color-text)]">{t("watermarkTool.suffix")}{" "}<input
               value={filenameSuffix}
               onChange={(event) => setFilenameSuffix(event.target.value)}
               className="form-input mt-2"
@@ -472,13 +471,9 @@ export function WatermarkTool() {
       <aside className="sticky top-[96px] space-y-4">
         <div className="summary-card overflow-hidden rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)]">
           <div className="border-b-2 border-[var(--color-celeste-border)] p-5">
-            <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[var(--color-celeste-text)]">
-              Previsualización
-            </p>
+            <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[var(--color-celeste-text)]">{t("watermarkTool.preview")}{" "}</p>
             <h2 className="mt-1.5 flex items-center gap-2 text-sm font-black text-[var(--color-text)]">
-              <MapPin size={17} strokeWidth={2} className="text-[var(--color-celeste-text)]" />
-              Vista previa y ubicación
-            </h2>
+              <MapPin size={17} strokeWidth={2} className="text-[var(--color-celeste-text)]" />{t("watermarkTool.previewAndPosition")}{" "}</h2>
           </div>
           <div className="p-5">
             {preview ? (
@@ -496,7 +491,7 @@ export function WatermarkTool() {
                   <img
                     src={preview.thumbnailUrl}
                     className="size-full object-fill"
-                    alt="Vista previa de la imagen"
+                    alt={t("watermarkTool.imagePreview")}
                   />
                   {watermarkUrl && (
                     <img
@@ -514,21 +509,19 @@ export function WatermarkTool() {
                         setIsDraggingMark(true);
                         moveMark(event.clientX, event.clientY);
                       }}
-                      alt="Marca de agua; arrástrala para moverla"
+                      alt={t("watermarkTool.watermarkDragToMoveIt")}
                     />
                   )}
                 </div>
                 <div>
-                  <p className="text-sm leading-5 text-[var(--color-text-secondary)]">
-                    Arrastra la marca directamente sobre la imagen para decidir su posición.
-                  </p>
+                  <p className="text-sm leading-5 text-[var(--color-text-secondary)]">{t("watermarkTool.dragTheWatermarkDirectlyOnThe")}{" "}</p>
                   <div className="mt-4 space-y-3">
                     {sliders.map((slider) => (
                       <label
                         key={slider.label}
                         className="block text-xs font-bold text-[var(--color-text)]"
                       >
-                        {slider.label}: {slider.value}
+                        {slider.label}: {number(slider.value)}
                         {slider.unit}
                         <input
                           className="mt-1.5 h-2 w-full cursor-pointer appearance-none rounded-[22px] bg-[var(--color-celeste-border)] accent-[var(--color-accent)]"
@@ -545,15 +538,10 @@ export function WatermarkTool() {
                 </div>
               </div>
             ) : (
-              <p className="mt-4 text-xs text-[var(--color-text-secondary)]">
-                Añade imágenes para ajustar la marca.
-              </p>
+              <p className="mt-4 text-xs text-[var(--color-text-secondary)]">{t("watermarkTool.addImagesToAdjustTheWatermark")}{" "}</p>
             )}
           </div>
-          <p className="mb-5 px-5 text-xs leading-5 text-[var(--color-text-dim)]">
-            La vista previa conserva la proporción de la imagen seleccionada. La posición se aplica
-            proporcionalmente a todo el lote.
-          </p>
+          <p className="mb-5 px-5 text-xs leading-5 text-[var(--color-text-dim)]">{t("watermarkTool.thePreviewKeepsTheSelectedImage")}{" "}</p>
 
           {/* Action area */}
           <div className="border-t-2 border-[var(--color-celeste-border)] p-5 bg-[var(--color-celeste-bg)]">
@@ -568,7 +556,7 @@ export function WatermarkTool() {
               ) : (
                 <Sparkles size={17} strokeWidth={2} />
               )}
-              {isApplying ? `Aplicando… ${Math.round(progress)}%` : "Aplicar marca de agua"}
+              {isApplying ? t("watermarkTool.applying", { p0: Math.round(progress) }) : t("watermarkTool.applyWatermark")}
             </button>
 
             {/* Cancel */}
@@ -580,19 +568,16 @@ export function WatermarkTool() {
                 className="mt-3 w-full rounded-[22px] border-2 border-[var(--color-coral-border)] bg-[var(--color-coral-bg)] py-2.5 text-xs font-bold text-[var(--color-coral-text)] transition-colors hover:bg-[var(--color-control)]"
               >
                 {isCancelling ? (
-                  "Deteniendo…"
+                  t("watermarkTool.stopping")
                 ) : (
                   <>
-                    <Square size={11} strokeWidth={2} className="mr-1 inline align-middle" fill="currentColor" /> Detener proceso
-                  </>
+                    <Square size={11} strokeWidth={2} className="mr-1 inline align-middle" fill="currentColor" />{t("watermarkTool.stopProcess")}{" "}</>
                 )}
               </button>
             )}
 
             {!ready && !isApplying && (
-              <p className="mt-3 text-center text-xs leading-4 text-[var(--color-celeste-text)]">
-                Completa los pasos pendientes para activar el botón.
-              </p>
+              <p className="mt-3 text-center text-xs leading-4 text-[var(--color-celeste-text)]">{t("watermarkTool.completeTheRemainingStepsToEnable")}{" "}</p>
             )}
           </div>
         </div>
@@ -603,8 +588,7 @@ export function WatermarkTool() {
             <div className="flex items-center gap-2 text-[var(--color-menta-text)]">
               <CheckCircle2 size={18} strokeWidth={2} />
               <b className="text-xs">
-                {results.filter((result) => result.success).length} imágenes guardadas
-              </b>
+                {plural("images.saved.other", results.filter((result) => result.success).length)}</b>
             </div>
             <div className="mt-3 flex gap-3">
               <button
@@ -612,18 +596,14 @@ export function WatermarkTool() {
                 onClick={() => void showResults()}
                 className="inline-flex items-center rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-control)] px-3 py-1.5 text-xs font-bold text-[var(--color-celeste-text)] transition-colors hover:bg-[var(--color-celeste-bg)]"
               >
-                <FolderOpen size={13} strokeWidth={2} className="mr-1 inline align-middle" />
-                Mostrar resultados
-              </button>
+                <FolderOpen size={13} strokeWidth={2} className="mr-1 inline align-middle" />{t("watermarkTool.showResults")}{" "}</button>
               <button
                 type="button"
                 disabled={isApplying || isLoading}
                 onClick={startNewBatch}
                 className="inline-flex items-center rounded-[22px] border-2 border-[var(--color-menta-border)] bg-[var(--color-control)] px-3 py-1.5 text-xs font-bold text-[var(--color-menta-text)] transition-colors hover:bg-[var(--color-menta-bg)]"
               >
-                <RotateCcw size={13} strokeWidth={2} className="mr-1 inline align-middle" />
-                Nuevo lote
-              </button>
+                <RotateCcw size={13} strokeWidth={2} className="mr-1 inline align-middle" />{t("watermarkTool.newBatch")}{" "}</button>
             </div>
           </section>
         )}

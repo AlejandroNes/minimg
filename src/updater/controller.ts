@@ -1,3 +1,5 @@
+import type { MessageValue } from "../i18n/index.ts";
+import { message } from "../i18n/index.ts";
 export type UpdatePhase = "idle" | "unconfigured" | "checking" | "current" | "available" | "downloading" | "installing" | "installed" | "error";
 
 export interface DownloadEvent {
@@ -24,13 +26,13 @@ export interface UpdateState {
   promptOpen: boolean;
   downloaded: number;
   total?: number;
-  message: string;
+  message: MessageValue;
 }
 
 const initialState: UpdateState = {
   phase: "idle", update: null, promptOpen: false, downloaded: 0, message: "",
 };
-const details = (error: unknown) => error instanceof Error ? error.message : String(error);
+const details = (error: unknown): MessageValue => error as MessageValue;
 
 // El controlador permite probar consentimiento, errores y recursos sin instalar software.
 export class UpdaterController {
@@ -83,7 +85,7 @@ export class UpdaterController {
       const configured = await this.api.configured();
       if (!this.active || generation !== this.generation) return;
       if (!configured) {
-        this.set({ phase: "unconfigured", message: "Las actualizaciones estarán disponibles cuando se configure la distribución pública." });
+        this.set({ phase: "unconfigured", message: message("controller.updatesWillBeAvailableWhenPublic") });
         return;
       }
       const update = await this.api.check();
@@ -95,12 +97,12 @@ export class UpdaterController {
       if (update) {
         this.set({ phase: "available", update: { version: update.version, notes: update.body }, promptOpen: true });
       } else {
-        this.set({ phase: "current", message: silent ? "" : "Ya tienes la última versión disponible." });
+        this.set({ phase: "current", message: silent ? "" : message("controller.youAlreadyHaveTheLatestVersion") });
       }
     } catch (error) {
       if (generation === this.generation) this.set({
         phase: silent ? "idle" : "error",
-        message: silent ? "" : `No se pudieron comprobar las actualizaciones. Comprueba tu conexión e inténtalo de nuevo. ${details(error)}`,
+        message: silent ? "" : message("controller.updatesCouldNotBeCheckedCheck", { p0: details(error) }),
       });
     } finally {
       this.running = false;
@@ -117,7 +119,7 @@ export class UpdaterController {
   install = async () => {
     if (this.running || !this.handle || !this.active) return;
     if (this.isBusy()) {
-      this.set({ message: "Espera a que termine el procesamiento de imágenes para actualizar." });
+      this.set({ message: message("controller.waitForImageProcessingToFinish") });
       return;
     }
     this.running = true;
@@ -132,10 +134,10 @@ export class UpdaterController {
       // Windows cierra la aplicación al iniciar el instalador. macOS requiere reinicio.
       this.handle = null;
       await this.close(update);
-      this.set({ phase: "installed", message: "Actualización instalada. Reiniciando la aplicación…" });
+      this.set({ phase: "installed", message: message("controller.updateInstalledRestartingTheApplication") });
       if (this.active) await this.restart();
     } catch (error) {
-      this.set({ phase: "error", message: `No se pudo descargar o instalar la actualización. Puedes volver a intentarlo. ${details(error)}` });
+      this.set({ phase: "error", message: message("controller.theUpdateCouldNotBeDownloaded", { p0: details(error) }) });
     } finally {
       this.running = false;
       if (!this.active) {
@@ -151,7 +153,7 @@ export class UpdaterController {
     try {
       await this.api.relaunch();
     } catch (error) {
-      this.set({ message: `La actualización está instalada, pero no se pudo reiniciar. Reinicia la aplicación para usarla. ${details(error)}` });
+      this.set({ message: message("controller.theUpdateIsInstalledButThe", { p0: details(error) }) });
     } finally {
       this.restarting = false;
     }

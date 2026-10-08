@@ -1,8 +1,11 @@
+import { useTranslation } from "../i18n/useTranslation";
+import { renderMessage } from "../i18n/index";
 import { useEffect, useRef } from "react";
 import type { AppUpdater } from "../hooks/useUpdater";
 import { APP_NAME } from "../appMetadata";
 
 export function UpdateDialog({ updater }: { updater: AppUpdater }) {
+  const { t } = useTranslation();
   const { state, controller } = updater;
   const dialog = useRef<HTMLDivElement>(null);
   const working = state.phase === "downloading" || state.phase === "installing";
@@ -50,24 +53,25 @@ export function UpdateDialog({ updater }: { updater: AppUpdater }) {
           }
         }}>
         <h2 id="update-title" className="text-xl font-black text-[var(--color-text)]">
-          {installed ? "Actualización instalada" : `${APP_NAME} ${state.update?.version}`}
+          {installed ? t("updateDialog.updateInstalled") : `${APP_NAME} ${state.update?.version}`}
         </h2>
         <p className="mt-3 text-sm text-[var(--color-text-secondary)]">
-          {installed ? "Reinicia para utilizar la nueva versión." : "Hay una nueva versión disponible. Al actualizar, la aplicación se cerrará o reiniciará. Guarda tus resultados antes de continuar."}
+          {installed ? t("updateDialog.restartToUseTheNewVersion") : t("updateDialog.aNewVersionIsAvailableUpdating")}
         </p>
         {state.update?.notes && <div className="mt-4">
-          <h3 className="text-sm font-bold text-[var(--color-text)]">Cambios de esta versión</h3>
+          <p className="text-xs text-[var(--color-text-dim)]">{t("updates.notesLanguage")}</p>
+          <h3 className="text-sm font-bold text-[var(--color-text)]">{t("updateDialog.whatSNewInThisVersion")}</h3>
           <p className="mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap break-words text-sm text-[var(--color-text-secondary)]">{state.update.notes}</p>
         </div>}
         <div role="status" aria-live="polite" className="mt-4 text-sm text-[var(--color-text-secondary)]">
-          {state.phase === "downloading" && `Descargando actualización${percentage === undefined ? "…" : `: ${percentage}%`}`}
-          {state.phase === "installing" && "Verificando e instalando la actualización…"}
-          {state.message}
+          {state.phase === "downloading" && (percentage === undefined ? t("updates.downloadingUnknown") : t("updates.downloading", { percent: percentage }))}
+          {state.phase === "installing" && t("updateDialog.verifyingAndInstallingTheUpdate")}
+          {renderMessage(state.message)}
         </div>
         {state.phase === "downloading" && (
           <div
             role="progressbar"
-            aria-label="Descarga de actualización"
+            aria-label={t("updateDialog.updateDownload")}
             aria-valuenow={percentage ?? 0}
             aria-valuemin={0}
             aria-valuemax={100}
@@ -81,9 +85,9 @@ export function UpdateDialog({ updater }: { updater: AppUpdater }) {
         )}
         <div className="mt-6 flex justify-end gap-3">
           <button type="button" disabled={working} onClick={controller.later}
-            className="rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-control)] px-4 py-2.5 text-sm font-bold text-[var(--color-celeste-text)] transition-colors hover:bg-[var(--color-celeste-bg)] disabled:opacity-50">Más tarde</button>
+            className="rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-control)] px-4 py-2.5 text-sm font-bold text-[var(--color-celeste-text)] transition-colors hover:bg-[var(--color-celeste-bg)] disabled:opacity-50">{t("updateDialog.later")}</button>
           <button type="button" disabled={working} onClick={() => void (installed ? controller.restart() : controller.install())}
-            className="primary-action w-auto disabled:opacity-50">{working ? "Actualizando…" : installed ? "Reiniciar" : "Actualizar"}</button>
+            className="primary-action w-auto disabled:opacity-50">{working ? t("updateDialog.updating") : installed ? t("updateDialog.restart") : t("updateDialog.update")}</button>
         </div>
       </div>
     </div>

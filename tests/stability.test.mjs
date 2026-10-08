@@ -1,3 +1,6 @@
+import { setLanguage, detectLanguage } from "../src/i18n/language.ts";
+globalThis.localStorage = { getItem: () => null, setItem: () => {} };
+setLanguage("es");
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadImageItems } from '../src/imageLoading.ts';
@@ -55,7 +58,7 @@ test('preferencias corruptas, tipos inválidos y almacenamiento bloqueado usan v
   globalThis.localStorage={getItem:()=>JSON.stringify({mode:'unknown',outputFormat:42,advancedEnabled:'true',resizeWidth:0,filenameSuffix:[],effort:'invalid'})};
   assert.deepEqual(loadPreferences(),{});
   globalThis.localStorage={getItem:()=>{throw new Error('Storage bloqueado');}};
-  assert.deepEqual(loadSettings(),DEFAULT_SETTINGS);assert.deepEqual(loadPreferences(),{});
+  assert.deepEqual(loadSettings(),{...DEFAULT_SETTINGS,language:detectLanguage()});assert.deepEqual(loadPreferences(),{});
 });
 test('preferencias válidas conservan calidad, formato, destino y opciones avanzadas',()=>{
   const stored={mode:'recommended',outputFormat:'jpeg',effort:'maximum',filenameSuffix:'-東京',outputDir:'/destino',advancedEnabled:true,resizeWidth:1500,targetSizeKb:100,applyOrientation:false};
@@ -68,7 +71,7 @@ test('la predicción de redimensionado no amplía imágenes pequeñas',()=>{
   assert.deepEqual(resizedDimensions(100,200,50,50,true),[25,50]);
   assert.deepEqual(resizedDimensions(100,200,50,50,false),[50,50]);
   for(const value of [0,NaN,Infinity,-1])assert.equal(formatBytes(value),'0 B');
-  assert.equal(formatBytes(1024),'1.0 KB');
+  assert.equal(formatBytes(1024),'1,0 KB');
 });
 
 test('la instalación bloquea el inicio de imágenes y libera el bloqueo también al fallar',async()=>{

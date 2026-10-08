@@ -1,3 +1,4 @@
+use crate::errors::app_error;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -59,9 +60,9 @@ fn write_file_atomically_using(
 ) -> Result<(), String> {
     let parent = output_path
         .parent()
-        .ok_or_else(|| format!("Ruta de salida inválida: {}", output_path.display()))?;
+        .ok_or_else(|| app_error!("output_path_invalid", context: output_path.display()))?;
     if output_path.file_name().is_none() {
-        return Err("Nombre de salida inválido".into());
+        return Err(app_error!("output_name_invalid").into());
     }
     let nonce = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -72,12 +73,15 @@ fn write_file_atomically_using(
             .write(true)
             .create_new(true)
             .open(&temporary_path)
-            .map_err(|error| format!("No se pudo preparar {}: {error}", output_path.display()))?;
-        write(&mut temporary, bytes)
-            .map_err(|error| format!("No se pudo guardar {}: {error}", output_path.display()))?;
+            .map_err(
+                |error| app_error!("output_prepare", context: output_path.display(), detail: error),
+            )?;
+        write(&mut temporary, bytes).map_err(
+            |error| app_error!("output_save", context: output_path.display(), detail: error),
+        )?;
         if overwrite {
             std::fs::rename(&temporary_path, output_path)
-                .map_err(|error| format!("No se pudo finalizar {}: {error}", output_path.display()))
+                .map_err(|error| app_error!("output_finalize", context: output_path.display(), detail: error))
         } else {
             // Crear el destino de forma indivisible: rename reemplaza archivos en Unix.
             if std::fs::hard_link(&temporary_path, output_path).is_err() {
@@ -86,7 +90,7 @@ fn write_file_atomically_using(
                 publish_without_replacing(output_path, bytes)?;
             }
             std::fs::remove_file(&temporary_path)
-                .map_err(|error| format!("No se pudo retirar el archivo temporal: {error}"))
+                .map_err(|error| app_error!("temporary_remove", detail: error))
         }
     })();
     if write_result.is_err() {
@@ -100,13 +104,13 @@ fn publish_without_replacing(output_path: &Path, bytes: &[u8]) -> Result<(), Str
         .write(true)
         .create_new(true)
         .open(output_path)
-        .map_err(|error| format!("No se pudo guardar sin sobrescribir: {error}"))?;
+        .map_err(|error| app_error!("output_no_overwrite", detail: error))?;
     let result = file.write_all(bytes).and_then(|_| file.sync_all());
     drop(file);
     if result.is_err() {
         let _ = std::fs::remove_file(output_path);
     }
-    result.map_err(|error| format!("No se pudo finalizar el archivo: {error}"))
+    result.map_err(|error| app_error!("file_finalize", detail: error))
 }
 
 struct CandidateRequest<'a> {
@@ -146,7 +150,7 @@ fn available_output_path(
     let stem = source
         .file_stem()
         .and_then(|value| value.to_str())
-        .ok_or_else(|| format!("Nombre de archivo inválido: {}", source.display()))?;
+        .ok_or_else(|| app_error!("filename_invalid", context: source.display()))?;
 
     let suffix = safe_suffix(suffix);
     let mut base_name = format!("{stem}{suffix}");
@@ -172,9 +176,7 @@ fn available_output_path(
         }
     }
 
-    Err(format!(
-        "No se encontró un nombre disponible para {base_name}.{extension}"
-    ))
+    Err(app_error!("filename_unavailable", base_name: base_name, extension: extension))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -191,7 +193,7 @@ fn preserve_original(
     let extension = source
         .extension()
         .and_then(|value| value.to_str())
-        .ok_or_else(|| format!("Extensión inválida: {}", source.display()))?;
+        .ok_or_else(|| app_error!("extension_invalid", context: source.display()))?;
     let output_path = available_output_path(
         source,
         output_dir,
@@ -219,9 +221,9 @@ fn preserve_original(
         savings_percent: Some(0.0),
         final_width: Some(width),
         final_height: Some(height),
-        quality_used: Some("Original".to_string()),
+        quality_used: Some("original".to_string()),
         visual_score: Some(1.0),
-        visual_rating: Some("100% optimizada".to_string()),
+        visual_rating: Some("already_optimized".to_string()),
         output_format: extension.to_ascii_uppercase(),
         preserved_original: true,
         optimized: false,
@@ -243,17 +245,17 @@ fn load_image_with_transform(
 ) -> Result<(image::DynamicImage, bool), String> {
     let mut decoder = security::image_reader(source)?
         .into_decoder()
-        .map_err(|error| format!("No se pudo decodificar la imagen: {error}"))?;
+        .map_err(|error| app_error!("image_decode", detail: error))?;
     let (width, height) = decoder.dimensions();
     security::validate_dimensions(width, height)?;
     if decoder.total_bytes() > security::MAX_INPUT_BYTES {
-        return Err("La imagen decodificada supera el límite de 512 MB".into());
+        return Err(app_error!("decoded_too_large").into());
     }
     let orientation = decoder
         .orientation()
-        .map_err(|error| format!("No se pudo leer la orientación: {error}"))?;
+        .map_err(|error| app_error!("orientation_read", detail: error))?;
     let mut image = image::DynamicImage::from_decoder(decoder)
-        .map_err(|error| format!("No se pudo decodificar {}: {error}", source.display()))?;
+        .map_err(|error| app_error!("file_decode", context: source.display(), detail: error))?;
     if apply_orientation {
         image.apply_orientation(orientation);
     }
@@ -274,16 +276,16 @@ where
 {
     let _work = security::image_work()?;
     let original_size = std::fs::metadata(source)
-        .map_err(|error| format!("No se pudo leer {}: {error}", source.display()))?
+        .map_err(|error| app_error!("file_read", context: source.display(), detail: error))?
         .len();
     if is_cancelled() {
-        return Err("Conversión cancelada".to_string());
+        return Err(app_error!("conversion_cancelled"));
     }
     let (mut image, orientation_changed) =
         load_image_with_transform(source, options.apply_orientation)?;
     let original_dimensions = (image.width(), image.height());
     if is_cancelled() {
-        return Err("Conversión cancelada".to_string());
+        return Err(app_error!("conversion_cancelled"));
     }
 
     if let (Some(w), Some(h)) = (options.resize_width, options.resize_height) {
@@ -310,7 +312,7 @@ where
         orientation_changed || (final_width, final_height) != original_dimensions;
 
     if is_cancelled() {
-        return Err("Conversión cancelada".to_string());
+        return Err(app_error!("conversion_cancelled"));
     }
     let candidate = if options.output_format == OutputFormat::Automatic {
         select_candidate(
@@ -342,7 +344,7 @@ where
         )?
     };
     if is_cancelled() {
-        return Err("Conversión cancelada".to_string());
+        return Err(app_error!("conversion_cancelled"));
     }
     let Some(candidate) = candidate else {
         return preserve_original(
@@ -382,7 +384,7 @@ where
         options.protected_sources,
     )?;
     if is_cancelled() {
-        return Err("Conversión cancelada".to_string());
+        return Err(app_error!("conversion_cancelled"));
     }
     write_file_atomically(&output_path, &candidate.bytes, options.overwrite_existing)?;
     let savings_percent = if original_size == 0 {
@@ -404,7 +406,7 @@ where
         visual_rating: Some(
             candidate
                 .visual_score
-                .map_or("Alta (según calidad)", visual_rating)
+                .map_or("quality_high", visual_rating)
                 .to_string(),
         ),
         output_format: label_for(candidate.format).to_string(),
@@ -427,10 +429,10 @@ where
 {
     let _work = security::image_work()?;
     let original_size = std::fs::metadata(source)
-        .map_err(|error| format!("No se pudo leer {}: {error}", source.display()))?
+        .map_err(|error| app_error!("file_read", context: source.display(), detail: error))?
         .len();
     if is_cancelled() {
-        return Err("Aplicación cancelada".to_string());
+        return Err(app_error!("watermark_cancelled"));
     }
     let mut image = load_image(source, true)?.to_rgba8();
     let max_width = (u64::from(image.width()) * u64::from(options.size_percent.clamp(1, 100)) / 100)
@@ -455,7 +457,7 @@ where
         &options,
     );
     if is_cancelled() {
-        return Err("Aplicación cancelada".to_string());
+        return Err(app_error!("watermark_cancelled"));
     }
     image::imageops::overlay(&mut image, &mark, i64::from(x), i64::from(y));
     let output_format = source_output_format(source)?;
@@ -467,7 +469,7 @@ where
         OutputFormat::Automatic => unreachable!(),
     };
     if is_cancelled() {
-        return Err("Aplicación cancelada".to_string());
+        return Err(app_error!("watermark_cancelled"));
     }
     let output_path = available_output_path(
         source,
@@ -489,7 +491,7 @@ where
         }),
         final_width: Some(composite.width()),
         final_height: Some(composite.height()),
-        quality_used: Some("Marca de agua".to_string()),
+        quality_used: Some("watermark".to_string()),
         visual_score: None,
         visual_rating: None,
         output_format: label_for(output_format).to_string(),
@@ -510,10 +512,10 @@ fn source_output_format(source: &Path) -> Result<OutputFormat, String> {
         Some("jpg" | "jpeg") => Ok(OutputFormat::Jpeg),
         Some("png") => Ok(OutputFormat::Png),
         Some("webp") => Ok(OutputFormat::Webp),
-        _ => Err(format!(
-            "Formato de salida no compatible: {}",
-            source.display()
-        )),
+        _ => Err(
+            app_error!("output_format_unsupported", context: source.display()
+            ),
+        ),
     }
 }
 
@@ -570,7 +572,7 @@ fn select_candidate(
     if format == OutputFormat::Png {
         let candidate = make_candidate(image, format, true, 100)?;
         if is_cancelled() {
-            return Err("Conversión cancelada".to_string());
+            return Err(app_error!("conversion_cancelled"));
         }
         return Ok(
             (!require_lighter || (candidate.bytes.len() as u64) < original_size)
@@ -584,7 +586,7 @@ fn select_candidate(
     if lossless {
         let candidate = make_candidate(image, format, true, 100)?;
         if is_cancelled() {
-            return Err("Conversión cancelada".to_string());
+            return Err(app_error!("conversion_cancelled"));
         }
         if (!require_lighter || (candidate.bytes.len() as u64) < original_size)
             && target_size_kb
@@ -607,11 +609,11 @@ fn select_candidate(
         .filter(|&&quality| quality <= preferred_quality)
     {
         if is_cancelled() {
-            return Err("Conversión cancelada".to_string());
+            return Err(app_error!("conversion_cancelled"));
         }
         let candidate = make_candidate(image, format, false, quality)?;
         if is_cancelled() {
-            return Err("Conversión cancelada".to_string());
+            return Err(app_error!("conversion_cancelled"));
         }
         if require_lighter && candidate.bytes.len() as u64 >= original_size {
             continue;
@@ -653,12 +655,12 @@ fn make_candidate(
     };
     let bytes = encode_image(&comparison_image, format, lossless, quality)?;
     let decoded = image::load_from_memory(&bytes)
-        .map_err(|error| format!("No se pudo validar el archivo generado: {error}"))?;
+        .map_err(|error| app_error!("output_validate", detail: error))?;
     let visual_score = Some(structural_similarity(&comparison_image, &decoded)?);
     Ok(EncodedCandidate {
         bytes,
         quality_used: if lossless {
-            "Lossless".to_string()
+            "lossless".to_string()
         } else {
             quality.to_string()
         },
@@ -678,7 +680,7 @@ fn extension_for(format: OutputFormat) -> &'static str {
 
 fn label_for(format: OutputFormat) -> &'static str {
     match format {
-        OutputFormat::Automatic => "Automático",
+        OutputFormat::Automatic => "automatic",
         OutputFormat::Webp => "WebP",
         OutputFormat::Jpeg => "JPEG",
         OutputFormat::Png => "PNG",
@@ -719,7 +721,7 @@ fn encode_jpeg(image: &image::DynamicImage, quality: u8) -> Result<Vec<u8>, Stri
             rgb.height(),
             ExtendedColorType::Rgb8,
         )
-        .map_err(|error| format!("No se pudo codificar JPEG: {error}"))?;
+        .map_err(|error| app_error!("jpeg_encode", detail: error))?;
     Ok(bytes)
 }
 
@@ -737,7 +739,7 @@ fn encode_png(image: &image::DynamicImage) -> Result<Vec<u8>, String> {
         rgba.height(),
         ExtendedColorType::Rgba8,
     )
-    .map_err(|error| format!("No se pudo codificar PNG: {error}"))?;
+    .map_err(|error| app_error!("png_encode", detail: error))?;
     Ok(bytes)
 }
 
@@ -767,7 +769,7 @@ fn structural_similarity(
     optimized: &image::DynamicImage,
 ) -> Result<f64, String> {
     if original.dimensions() != optimized.dimensions() {
-        return Err("El archivo generado cambió las dimensiones de la imagen".to_string());
+        return Err(app_error!("output_dimensions_changed"));
     }
 
     let original = original.to_rgba8();
@@ -775,7 +777,7 @@ fn structural_similarity(
     let pixels = original.as_raw().len() / 4;
     let step = pixels.div_ceil(65_536).max(1);
     if pixels == 0 {
-        return Err("La imagen no contiene píxeles para comparar".to_string());
+        return Err(app_error!("pixels_missing"));
     }
 
     let mut original_mean = [0.0; 4];
@@ -841,13 +843,13 @@ fn structural_similarity(
 
 fn visual_rating(score: f64) -> &'static str {
     if score >= 0.99 {
-        "Excelente"
+        "excellent"
     } else if score >= 0.97 {
-        "Muy buena"
+        "very_good"
     } else if score >= 0.94 {
-        "Buena"
+        "good"
     } else {
-        "Revisar"
+        "review"
     }
 }
 
@@ -874,7 +876,7 @@ fn encode_webp(
     quality: u8,
 ) -> Result<Vec<u8>, String> {
     let mut config = webp::WebPConfig::new()
-        .map_err(|error| format!("No se pudo configurar libwebp: {error:?}"))?;
+        .map_err(|error| app_error!("webp_configure", detail: format!("{error:?}")))?;
     config.lossless = i32::from(lossless);
     config.quality = f32::from(quality);
     config.method = 6;
@@ -888,13 +890,13 @@ fn encode_webp(
         let rgba = image.to_rgba8();
         let encoded = webp::Encoder::from_rgba(rgba.as_raw(), rgba.width(), rgba.height())
             .encode_advanced(&config)
-            .map_err(|error| format!("No se pudo codificar WebP: {error:?}"))?;
+            .map_err(|error| app_error!("webp_encode", detail: format!("{error:?}")))?;
         Ok(encoded.to_vec())
     } else {
         let rgb = image.to_rgb8();
         let encoded = webp::Encoder::from_rgb(rgb.as_raw(), rgb.width(), rgb.height())
             .encode_advanced(&config)
-            .map_err(|error| format!("No se pudo codificar WebP: {error:?}"))?;
+            .map_err(|error| app_error!("webp_encode", detail: format!("{error:?}")))?;
         Ok(encoded.to_vec())
     }
 }
@@ -1007,7 +1009,7 @@ mod tests {
             },
             &|| true,
         );
-        assert!(result.is_err_and(|error| error.contains("cancelada")));
+        assert!(result.is_err_and(|error| error.contains("conversion_cancelled")));
     }
 
     #[test]
@@ -1037,7 +1039,7 @@ mod tests {
             },
         );
 
-        assert!(result.is_err_and(|error| error.contains("cancelada")));
+        assert!(result.is_err_and(|error| error.contains("conversion_cancelled")));
         assert_eq!(std::fs::read_dir(&output_dir)?.count(), 0);
         std::fs::remove_dir_all(&test_dir)?;
         Ok(())
@@ -1263,7 +1265,7 @@ mod tests {
             },
             || false,
         );
-        assert!(result.unwrap_err().contains("100 megapíxeles"));
+        assert!(result.unwrap_err().contains("dimensions_invalid"));
         std::fs::remove_dir_all(dir)?;
         Ok(())
     }
@@ -1507,6 +1509,20 @@ mod tests {
         rotated.extend_from_slice(&((exif.len() + 2) as u16).to_be_bytes());
         rotated.extend_from_slice(exif);
         rotated.extend_from_slice(&jpeg[2..]);
+        for orientation in 1..=8 {
+            let mut variant = rotated.clone();
+            variant[6 + 24] = orientation;
+            std::fs::write(&source, variant)?;
+            let (_, width, height, encoded_width, encoded_height) =
+                security::inspect_display_image(&source)?;
+            let preview = load_image(&source, true)?;
+            assert_eq!((encoded_width, encoded_height), (8, 4));
+            assert_eq!((width, height), (preview.width(), preview.height()));
+            assert_eq!(
+                (width, height),
+                if orientation >= 5 { (4, 8) } else { (8, 4) }
+            );
+        }
         std::fs::write(&source, rotated)?;
         let (loaded, transformed) = load_image_with_transform(&source, true)?;
         assert!(transformed);

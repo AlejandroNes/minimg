@@ -1,7 +1,11 @@
+import type { Translator } from "../i18n/index";
+import { useTranslation } from "../i18n/useTranslation";
+
 import { Check, Info } from "lucide-react";
 import type { OptimizationMode } from "../types";
 import { StepHeading } from "./StepHeading";
 
+export function getModePickerOptions(t: Translator) {
 const OPTIMIZATION_MODES: {
   value: OptimizationMode;
   label: string;
@@ -10,26 +14,26 @@ const OPTIMIZATION_MODES: {
 }[] = [
     {
       value: "smart",
-      label: "Recomendado",
+      label: t("advancedPanel.recommended"),
       description:
-        "Analiza cada imagen y elige automáticamente el mejor equilibrio.",
-      badge: "Ideal para la mayoría",
+        t("modePicker.analyzesEachImageAndAutomaticallySelects"),
+      badge: t("modePicker.bestForMostImages"),
     },
     {
       value: "recommended",
-      label: "Calidad equilibrada",
+      label: t("modePicker.balancedQuality"),
       description:
-        "Usa calidad 85 para obtener resultados predecibles y ligeros.",
+        t("modePicker.usesQualityForPredictableSmallFiles"),
     },
     {
       value: "maximumCompression",
-      label: "Archivo más pequeño",
+      label: t("modePicker.smallestFile"),
       description:
-        "Prioriza reducir el peso lo máximo posible, pero sin perder detalles importantes.",
+        t("modePicker.prioritizesTheSmallestPossibleFileSize"),
     },
   ];
-
-export { OPTIMIZATION_MODES };
+  return OPTIMIZATION_MODES;
+}
 
 export function ModePicker({
   value,
@@ -40,9 +44,11 @@ export function ModePicker({
   onChange: (mode: OptimizationMode) => void;
   disabled: boolean;
 }) {
+  const { t } = useTranslation();
+  const OPTIMIZATION_MODES = getModePickerOptions(t);
   return (
     <section data-step="3" data-complete={OPTIMIZATION_MODES.some((item) => item.value === value)} className="step-section p-5 sm:p-6">
-      <StepHeading number={3} completed={OPTIMIZATION_MODES.some((item) => item.value === value)} title="¿Qué resultado prefieres?" description="El modo recomendado funciona bien para la mayoría de imágenes." />
+      <StepHeading number={3} completed={OPTIMIZATION_MODES.some((item) => item.value === value)} title={t("modePicker.whichResultDoYouPrefer")} description={t("modePicker.theRecommendedModeWorksWellFor")} />
       <div className="mt-3.5 grid gap-2.5 lg:grid-cols-3">
         {OPTIMIZATION_MODES.map((item) => (
           <button
@@ -82,9 +88,7 @@ export function ModePicker({
       </div>
       <div className="mt-4 flex gap-2.5 rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] px-3.5 py-3 text-sm leading-5 text-[var(--color-celeste-text)]">
         <Info size={16} strokeWidth={2} className="mt-0.5 shrink-0 text-[var(--color-accent)]" />
-        <p>
-          Si una imagen ya no puede pesar menos, se conservará sin cambios en la carpeta de destino
-          y se mostrará como <b>"Ya estaba optimizada"</b>.
+        <p>{t("modePicker.ifAnImageCannotBeMade")}{" "}<b>{t("modePicker.alreadyOptimized")}</b>.
         </p>
       </div>
     </section>

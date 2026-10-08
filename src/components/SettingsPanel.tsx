@@ -1,18 +1,15 @@
+import type { MessageValue } from "../i18n/index";
+import { useTranslation } from "../i18n/useTranslation";
+import { message, renderMessage } from "../i18n/index";
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Info, Monitor, Moon, RotateCcw, Sun, User, Volume2 } from "lucide-react";
+import { Languages, Info, Monitor, Moon, RotateCcw, Sun, User, Volume2 } from "lucide-react";
 import { playFinishSound, type AppSettings, type Theme } from "../settings";
-import { APP_NAME, APP_DESCRIPTION, APP_DEVELOPER, APP_COPYRIGHT, APP_LICENSE, APP_LINKS } from "../appMetadata";
+import { APP_NAME, APP_DEVELOPER, APP_COPYRIGHT, APP_LICENSE, APP_LINKS } from "../appMetadata";
 import type { AppUpdater } from "../hooks/useUpdater";
 import { UpdatePanel } from "./UpdatePanel";
 import logoUrl from "../assets/logo.png";
-
-const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Sun }[] = [
-  { value: "light", label: "Claro", icon: Sun },
-  { value: "dark", label: "Oscuro", icon: Moon },
-  { value: "system", label: "Sistema", icon: Monitor },
-];
 
 function SectionHeading({
   icon,
@@ -51,13 +48,19 @@ export function SettingsPanel({
   onReset: () => void;
   updater: AppUpdater;
 }) {
+  const { t, language, setLanguage } = useTranslation();
+  const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Sun }[] = [
+  { value: "light", label: t("settingsPanel.light"), icon: Sun },
+  { value: "dark", label: t("settingsPanel.dark"), icon: Moon },
+  { value: "system", label: t("settingsPanel.system"), icon: Monitor },
+];
   const { username, theme, soundOnFinish } = settings;
   const [version, setVersion] = useState("");
-  const [linkError, setLinkError] = useState("");
+  const [linkError, setLinkError] = useState<MessageValue>("");
   const links = [
-    { label: "Sitio web oficial", url: APP_LINKS.website },
-    { label: "Términos y condiciones", url: APP_LINKS.terms },
-    { label: "Política de privacidad", url: APP_LINKS.privacy },
+    { label: t("settingsPanel.officialWebsite"), url: APP_LINKS.website },
+    { label: t("settingsPanel.termsAndConditions"), url: APP_LINKS.terms },
+    { label: t("settingsPanel.privacyPolicy"), url: APP_LINKS.privacy },
     ...(APP_LINKS.github ? [{ label: "GitHub", url: APP_LINKS.github }] : []),
   ];
 
@@ -66,7 +69,7 @@ export function SettingsPanel({
     try {
       await openUrl(url);
     } catch {
-      setLinkError("No se pudo abrir el enlace en el navegador. Inténtalo de nuevo.");
+      setLinkError(message("settingsPanel.theLinkCouldNotBeOpened"));
     }
   }
 
@@ -86,19 +89,26 @@ export function SettingsPanel({
 
   return (
     <div className="space-y-4">
+      <section className="rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] p-5">
+        <SectionHeading icon={<Languages size={19} strokeWidth={2} />} title={t("settings.language")} description={t("settings.languageHelp")} />
+        <label htmlFor="application-language" className="mt-4 block text-xs font-bold text-[var(--color-text)]">{t("settings.language")}</label>
+        <select id="application-language" className="form-input mt-2" value={language} onChange={event => setLanguage(event.target.value === "en" ? "en" : "es")}>
+          <option value="es" lang="es">Español</option>
+          <option value="en" lang="en">English</option>
+        </select>
+      </section>
+
       {/* Profile */}
       <section className="rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] p-5">
         <SectionHeading
           icon={<User size={19} strokeWidth={2} />}
-          title="Perfil"
-          description="Tu nombre aparece en el encabezado."
+          title={t("settingsPanel.profile")}
+          description={t("settingsPanel.yourNameAppearsInTheHeader")}
         />
-        <label className="mt-4 block text-xs font-bold text-[var(--color-text)]">
-          Nombre de usuario
-          <input
+        <label className="mt-4 block text-xs font-bold text-[var(--color-text)]">{t("settingsPanel.username")}{" "}<input
             value={username}
             onChange={(event) => onUsernameChange(event.target.value)}
-            placeholder="Ej.: Ana"
+            placeholder={t("settingsPanel.eGAna")}
             maxLength={40}
             className="form-input mt-2"
           />
@@ -109,8 +119,8 @@ export function SettingsPanel({
       <section className="rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] p-5">
         <SectionHeading
           icon={<Sun size={19} strokeWidth={2} />}
-          title="Apariencia"
-          description="Elige el tema de la aplicación."
+          title={t("settingsPanel.appearance")}
+          description={t("settingsPanel.chooseTheApplicationTheme")}
         />
         <div className="mt-4 grid grid-cols-3 gap-2">
           {THEME_OPTIONS.map((option) => {
@@ -139,8 +149,8 @@ export function SettingsPanel({
       <section className="rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] p-5">
         <SectionHeading
           icon={<Volume2 size={19} strokeWidth={2} />}
-          title="Comportamiento"
-          description="Avisos al finalizar un lote."
+          title={t("settingsPanel.behavior")}
+          description={t("settingsPanel.notificationsWhenABatchFinishes")}
         />
         <div className="mt-4 flex items-center justify-between gap-3">
           <label className="option-toggle cursor-pointer">
@@ -150,17 +160,15 @@ export function SettingsPanel({
               onChange={(event) => onSoundOnFinishChange(event.target.checked)}
             />
             <span>
-              <b>Sonido al terminar</b>
-              <small>Reproduce un aviso cuando termina un lote completo.</small>
+              <b>{t("settingsPanel.soundOnCompletion")}</b>
+              <small>{t("settingsPanel.playsANotificationSoundWhenA")}</small>
             </span>
           </label>
           <button
             type="button"
             onClick={() => playFinishSound()}
             className="shrink-0 rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-control)] px-3 py-2 text-xs font-bold text-[var(--color-celeste-text)] transition-colors hover:bg-[var(--color-celeste-bg)]"
-          >
-            Probar
-          </button>
+          >{t("settingsPanel.test")}{" "}</button>
         </div>
       </section>
 
@@ -168,29 +176,29 @@ export function SettingsPanel({
       <section className="rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] p-5">
         <SectionHeading
           icon={<Info size={19} strokeWidth={2} />}
-          title="Acerca de"
-          description="Información de la aplicación."
+          title={t("settingsPanel.about")}
+          description={t("settingsPanel.applicationInformation")}
         />
         <dl className="mt-4 space-y-2 text-sm">
           <div className="flex items-center justify-between gap-3">
-            <dt className="text-[var(--color-text-secondary)]">Aplicación</dt>
+            <dt className="text-[var(--color-text-secondary)]">{t("settingsPanel.application")}</dt>
             <dd className="flex items-center gap-2 font-bold text-[var(--color-text)]">
               <img src={logoUrl} alt="" className="size-5 object-contain" />
               {APP_NAME}
             </dd>
           </div>
           <div className="flex justify-between gap-3">
-            <dt className="text-[var(--color-text-secondary)]">Versión</dt>
+            <dt className="text-[var(--color-text-secondary)]">{t("settingsPanel.version")}</dt>
             <dd className="font-bold text-[var(--color-text)]">{version || "—"}</dd>
           </div>
           <div className="flex justify-between gap-3">
-            <dt className="text-[var(--color-text-secondary)]">Licencia</dt>
+            <dt className="text-[var(--color-text-secondary)]">{t("settingsPanel.license")}</dt>
             <dd className="font-bold text-[var(--color-text)]">{APP_LICENSE}</dd>
           </div>
         </dl>
-        <p className="mt-4 text-sm text-[var(--color-text-secondary)]">{APP_DESCRIPTION}</p>
-        <p className="mt-2 text-sm font-bold text-[var(--color-text)]">Desarrollado por {APP_DEVELOPER}</p>
-        <nav aria-label="Enlaces de Minimg" className="mt-4 flex flex-col items-start gap-2">
+        <p className="mt-4 text-sm text-[var(--color-text-secondary)]">{t("app.description")}</p>
+        <p className="mt-2 text-sm font-bold text-[var(--color-text)]">{t("settingsPanel.developedBy")}{" "}{APP_DEVELOPER}</p>
+        <nav aria-label={t("settingsPanel.minimgLinks")} className="mt-4 flex flex-col items-start gap-2">
           {links.map(({ label, url }) => (
             <a key={label} href={url} onClick={(event) => {
               event.preventDefault();
@@ -200,8 +208,9 @@ export function SettingsPanel({
             </a>
           ))}
         </nav>
-        {linkError && <p role="alert" className="mt-3 text-sm text-[var(--color-text)]">{linkError}</p>}
-        <p className="mt-4 text-xs text-[var(--color-text-secondary)]">Las imágenes se procesan localmente en tu dispositivo.</p>
+        <p className="mt-2 text-xs text-[var(--color-text-secondary)]">{t("settings.legalLanguage")}</p>
+        {linkError && <p role="alert" className="mt-3 text-sm text-[var(--color-text)]">{renderMessage(linkError)}</p>}
+        <p className="mt-4 text-xs text-[var(--color-text-secondary)]">{t("settingsPanel.imagesAreProcessedLocallyOnYour")}</p>
         <p className="mt-2 text-xs text-[var(--color-text-secondary)]">{APP_COPYRIGHT}</p>
         <UpdatePanel updater={updater} embedded />
       </section>
@@ -214,21 +223,15 @@ export function SettingsPanel({
               <RotateCcw size={19} strokeWidth={2} />
             </span>
             <div>
-              <h3 className="text-base font-extrabold text-[var(--color-text)]">
-                Restaurar configuración
-              </h3>
-              <p className="text-sm text-[var(--color-text-secondary)]">
-                Vuelve a los valores originales.
-              </p>
+              <h3 className="text-base font-extrabold text-[var(--color-text)]">{t("settingsPanel.resetSettings")}{" "}</h3>
+              <p className="text-sm text-[var(--color-text-secondary)]">{t("settingsPanel.returnToTheOriginalSettings")}{" "}</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onReset}
             className="rounded-[22px] border-2 border-[var(--color-coral-border)] bg-[var(--color-control)] px-4 py-2.5 text-xs font-bold text-[var(--color-coral-text)] transition-colors hover:bg-[var(--color-coral-bg)]"
-          >
-            Restaurar
-          </button>
+          >{t("settingsPanel.reset")}{" "}</button>
         </div>
       </section>
     </div>

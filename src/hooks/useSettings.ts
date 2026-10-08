@@ -1,3 +1,6 @@
+import { useTranslation } from "../i18n/useTranslation";
+import { detectLanguage } from "../i18n/language";
+
 import { useCallback, useEffect, useState } from "react";
 import {
   applyTheme,
@@ -8,11 +11,12 @@ import {
 } from "../settings";
 
 export function useSettings() {
+  const { language, setLanguage } = useTranslation();
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
-    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* Preferencias válidas en memoria. */ }
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...settings, language })); } catch { /* Preferencias válidas en memoria. */ }
   }, [settings]);
 
   useEffect(() => {
@@ -49,12 +53,14 @@ export function useSettings() {
   const close = useCallback(() => setIsOpen(false), []);
 
   const reset = useCallback(() => {
+    setLanguage(detectLanguage());
     try { localStorage.removeItem(SETTINGS_KEY); } catch { /* El restablecimiento sigue disponible. */ }
     setSettings({ ...DEFAULT_SETTINGS, watermarkDefaults: { ...DEFAULT_SETTINGS.watermarkDefaults } });
   }, []);
 
   return {
-    settings,
+    settings: { ...settings, language },
+    setLanguage,
     setTheme,
     setUsername,
     setSoundOnFinish,

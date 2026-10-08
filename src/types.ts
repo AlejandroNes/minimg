@@ -1,3 +1,4 @@
+import type { NativeError } from "./i18n/index";
 export type ActiveTool = "compress" | "watermark";
 
 export interface ImageInfo {
@@ -5,6 +6,8 @@ export interface ImageInfo {
   name: string;
   width: number;
   height: number;
+  encodedWidth?: number;
+  encodedHeight?: number;
   size: number;
 }
 
@@ -54,7 +57,7 @@ export interface ConversionResult {
   preservedOriginal: boolean;
   optimized: boolean;
   success: boolean;
-  error: string | null;
+  error: NativeError | string | null;
 }
 
 export interface ConversionProgress {

@@ -1,3 +1,7 @@
+import { renderMessage } from "../src/i18n/index.ts";
+import { setLanguage } from "../src/i18n/language.ts";
+globalThis.localStorage = { getItem: () => null, setItem: () => {} };
+setLanguage("es");
 import test from "node:test";
 import assert from "node:assert/strict";
 import { UpdaterController } from "../src/updater/controller.ts";
@@ -40,7 +44,7 @@ test("desconexión automática silenciosa; búsqueda manual informa del error", 
   assert.equal(controller.getSnapshot().promptOpen, false);
   await controller.check();
   assert.equal(controller.getSnapshot().phase, "error");
-  assert.match(controller.getSnapshot().message, /offline/);
+  assert.match(renderMessage(controller.getSnapshot().message), /offline/);
 });
 
 test("sin nueva versión no se abre un aviso ni se descarga", async () => {
@@ -67,7 +71,7 @@ test("un lote activo impide instalar y reiniciar", async () => {
   const { controller, calls } = fixture({}, () => true);
   await controller.check();
   await controller.install();
-  assert.match(controller.getSnapshot().message, /procesamiento/);
+  assert.match(renderMessage(controller.getSnapshot().message), /procesamiento/);
   assert.deepEqual(calls, ["check"]);
 });
 
@@ -77,7 +81,7 @@ test("firma rechazada por el plugin informa del error y nunca reinicia", async (
   await controller.check();
   await controller.install();
   assert.equal(controller.getSnapshot().phase, "error");
-  assert.match(controller.getSnapshot().message, /Invalid signature/);
+  assert.match(renderMessage(controller.getSnapshot().message), /Invalid signature/);
   assert.deepEqual(calls, ["check"]);
 });
 
@@ -100,7 +104,7 @@ test("fallo de reinicio conserva el estado instalado y permite reintentarlo", as
   await controller.check();
   await controller.install();
   assert.equal(controller.getSnapshot().phase, "installed");
-  assert.match(controller.getSnapshot().message, /no se pudo reiniciar/);
+  assert.match(renderMessage(controller.getSnapshot().message), /no se pudo reiniciar/);
   await controller.restart();
   assert.equal(attempts, 2);
   assert.equal(calls.filter((call) => call === "install").length, 1);

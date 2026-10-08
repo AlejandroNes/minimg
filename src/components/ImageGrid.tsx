@@ -1,3 +1,5 @@
+import { useTranslation } from "../i18n/useTranslation";
+
 import { ArrowRight, Images, Plus, Trash2, X } from "lucide-react";
 import { formatBytes, resizedDimensions } from "../formatters";
 import type { ImageItem } from "../types";
@@ -23,6 +25,7 @@ export function ImageGrid({
   resizeHeight?: number | null;
   keepAspectRatio?: boolean;
 }) {
+  const { t, plural, number } = useTranslation();
   if (images.length === 0) return null;
 
   return (
@@ -35,10 +38,9 @@ export function ImageGrid({
           </span>
           <div>
             <p className="text-xs font-extrabold text-[var(--color-text)]">
-              {images.length} {images.length === 1 ? "imagen seleccionada" : "imágenes seleccionadas"}
+              {plural("images.selected.other", images.length)}
             </p>
-            <p className="mt-0.5 text-xs font-semibold text-[var(--color-text-dim)]">
-              Peso total: {formatBytes(totalOriginalSize)}
+            <p className="mt-0.5 text-xs font-semibold text-[var(--color-text-dim)]">{t("imageGrid.totalSize")}{" "}{formatBytes(totalOriginalSize)}
             </p>
           </div>
         </div>
@@ -49,16 +51,14 @@ export function ImageGrid({
             onClick={onAdd}
             className="compact-button rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-control)] text-[var(--color-celeste-text)] hover:border-[var(--color-border-hover)]"
           >
-            <Plus size={14} strokeWidth={2} /> Añadir más
-          </button>
+            <Plus size={14} strokeWidth={2} />{t("imageGrid.addMore")}{" "}</button>
           <button
             disabled={disabled}
             type="button"
             onClick={onClear}
             className="compact-button rounded-[22px] border-2 border-[var(--color-coral-border)] bg-[var(--color-coral-bg)] text-[var(--color-coral-text)] hover:border-[var(--color-coral-text)]"
           >
-            <Trash2 size={14} strokeWidth={2} /> Quitar todas
-          </button>
+            <Trash2 size={14} strokeWidth={2} />{t("watermarkTool.removeAll")}{" "}</button>
         </div>
       </div>
 
@@ -72,7 +72,7 @@ export function ImageGrid({
             <div className="relative shrink-0 overflow-hidden rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)]">
               <img
                 src={image.thumbnailUrl}
-                alt={`Vista previa de ${image.name}`}
+                alt={t("imageGrid.previewOf", { p0: image.name })}
                 className="size-14 object-cover"
               />
               <span className="absolute bottom-0.5 left-0.5 rounded-[22px] bg-slate-950/75 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-white">
@@ -92,13 +92,13 @@ export function ImageGrid({
                   if (w !== image.width || h !== image.height) {
                     return (
                       <>
-                        <span className="line-through opacity-70">{image.width} × {image.height} px</span>
+                        <span className="line-through opacity-70">{number(image.width)} × {number(image.height)} px</span>
                         <ArrowRight size={12} strokeWidth={2} className="mx-1 inline align-baseline text-[var(--color-accent-text)]" />
-                        <span className="font-bold text-[var(--color-accent-text)]">{w} × {h} px</span>
+                        <span className="font-bold text-[var(--color-accent-text)]">{number(w)} × {number(h)} px</span>
                       </>
                     );
                   }
-                  return `${image.width} × ${image.height} px`;
+                  return `${number(image.width)} × ${number(image.height)} px`;
                 })()}
               </p>
               <p className="mt-0.5 text-xs font-bold text-[var(--color-text-secondary)]">
@@ -110,7 +110,7 @@ export function ImageGrid({
               type="button"
               onClick={() => onRemove(image.path)}
               className="grid size-8 shrink-0 place-items-center rounded-[22px] border-2 border-transparent text-[var(--color-text-dim)] opacity-0 transition-all hover:border-[var(--color-coral-border)] hover:bg-[var(--color-coral-bg)] hover:text-[var(--color-coral-text)] focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-0"
-              aria-label={`Quitar ${image.name}`}
+              aria-label={t("watermarkTool.remove", { p0: image.name })}
             >
               <X size={15} strokeWidth={2} />
             </button>

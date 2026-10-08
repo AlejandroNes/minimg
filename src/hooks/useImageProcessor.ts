@@ -1,3 +1,5 @@
+import type { MessageValue } from "../i18n/index.ts";
+import { message, translate as t } from "../i18n/index.ts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -13,7 +15,7 @@ import type {
   OptimizationMode,
   OutputFormat,
 } from "../types";
-import { loadSettings, playFinishSound } from "../settings";
+import { type AppSettings, playFinishSound } from "../settings";
 import { loadImageItems } from "../imageLoading";
 import { loadPreferences, type SavedPreferences } from "../preferences";
 import { getProcessingActivity as getImageActivity, trackImageTask } from "../updater/imageActivity";
@@ -21,11 +23,17 @@ import { getProcessingActivity as getImageActivity, trackImageTask } from "../up
 const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "webp"];
 const PREFERENCES_KEY = "image-compressor-preferences-v1";
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function errorMessage(error: unknown): MessageValue {
+  return error as MessageValue;
 }
 
-export function useImageProcessor() {
+function maxImageWidth(items: ImageItem[], oriented: boolean): number {
+  return items.reduce((max, item) => Math.max(max, oriented ? item.width : item.encodedWidth ?? item.width), 0);
+}
+
+export function useImageProcessor(settings: AppSettings) {
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const savedPreferences = useMemo(loadPreferences, []);
   const [images, setImages] = useState<ImageItem[]>([]);
   const [mode, setMode] = useState<OptimizationMode>(savedPreferences.mode ?? "smart");
@@ -66,7 +74,7 @@ export function useImageProcessor() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<ConversionResult[]>([]);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<MessageValue>(null);
   const [wasCancelled, setWasCancelled] = useState(false);
   const [activeTool, setActiveTool] = useState<ActiveTool>("compress");
   const thumbnailUrls = useRef(new Set<string>());
@@ -78,6 +86,22 @@ export function useImageProcessor() {
   const converting = useRef(false);
   const cancelling = useRef(false);
   const dialog = useRef(false);
+
+  const orientationEnabled = !advancedEnabled || applyOrientation;
+  const orientationRef = useRef(orientationEnabled);
+  orientationRef.current = orientationEnabled;
+  const displayImages = useMemo(() => orientationEnabled ? images : images.map(image => ({
+    ...image, width: image.encodedWidth ?? image.width, height: image.encodedHeight ?? image.height,
+  })), [images, orientationEnabled]);
+
+  function updateOrientation(next: boolean) {
+    const previousMax = maxImageWidth(imagesRef.current, orientationEnabled);
+    const nextMax = maxImageWidth(imagesRef.current, next);
+    setResizeWidth(previous => {
+      const selected = parseInt(previous, 10) || previousMax;
+      return nextMax ? String(selected >= previousMax ? nextMax : Math.min(selected, nextMax)) : "";
+    });
+  }
 
   const totalOriginalSize = useMemo(
     () => images.reduce((total, image) => total + image.size, 0),
@@ -108,11 +132,11 @@ export function useImageProcessor() {
         setResults([]);
         setProgress(0);
         setWasCancelled(false);
-        setResizeWidth(String(updated.reduce((maximum, item) => Math.max(maximum, item.width), 0)));
+        setResizeWidth(String(maxImageWidth(updated, orientationRef.current)));
       }
-      if (loaded.errors.length) setNotice(`Algunos archivos no se pudieron añadir. ${loaded.errors.slice(0, 3).join(" ")}`);
+      if (loaded.errors.length) setNotice(message("watermarkTool.someFilesCouldNotBeAdded", { p0: loaded.errors.slice(0, 3).flatMap(error => [error, " "]) }));
     } catch (error) {
-      if (current()) setNotice(`No pudimos leer las imágenes. ${errorMessage(error)}`);
+      if (current()) setNotice(message("watermarkTool.weCouldNotReadTheImages", { p0: errorMessage(error) }));
     } finally {
       loading.current = false;
       if (current()) setIsLoading(false);
@@ -137,7 +161,7 @@ export function useImageProcessor() {
       .then((cleanup) => {
         if (disposed) cleanup();
         else unlisten = cleanup;
-      }).catch((error) => { if (!disposed) setNotice(`No pudimos activar el arrastre. ${errorMessage(error)}`); });
+      }).catch((error) => { if (!disposed) setNotice(message("watermarkTool.weCouldNotEnableDragAnd", { p0: errorMessage(error) })); });
     return () => {
       disposed = true;
       unlisten?.();
@@ -165,7 +189,7 @@ export function useImageProcessor() {
       targetSizeKb,
       outputDir,
       advancedEnabled,
-      resizeWidth: resizeWidth ? parseInt(resizeWidth) : null,
+      resizeWidth: resizeWidth ? parseInt(resizeWidth, 10) : null,
       resizeHeight: resizeHeight ? parseInt(resizeHeight) : null,
       keepAspectRatio,
     };
@@ -189,10 +213,10 @@ export function useImageProcessor() {
     if (dialog.current || loading.current || converting.current || getImageActivity()) return;
     dialog.current = true;
     try {
-      const selected = await open({ multiple: true, directory: false, title: "Seleccionar imágenes", filters: [{ name: "Imágenes compatibles", extensions: IMAGE_EXTENSIONS }] });
+      const selected = await open({ multiple: true, directory: false, title: t("imageProcessor.selectImages"), filters: [{ name: t("imageProcessor.supportedImages"), extensions: IMAGE_EXTENSIONS }] });
       if (mounted.current && selected) await addPaths(Array.isArray(selected) ? selected : [selected]);
     } catch (error) {
-      if (mounted.current) setNotice(`No pudimos abrir la selección. ${errorMessage(error)}`);
+      if (mounted.current) setNotice(message("watermarkTool.weCouldNotOpenTheFile", { p0: errorMessage(error) }));
     } finally { dialog.current = false; }
   }
 
@@ -200,13 +224,13 @@ export function useImageProcessor() {
     if (dialog.current || loading.current || converting.current || getImageActivity()) return;
     dialog.current = true;
     try {
-      const selected = await open({ directory: true, multiple: false, title: "Elegir carpeta de destino" });
+      const selected = await open({ directory: true, multiple: false, title: t("imageProcessor.chooseOutputFolder") });
       if (mounted.current && typeof selected === "string") {
         setOutputDir(selected);
         if (selected !== outputDir) { setResults([]); setProgress(0); }
       }
     } catch (error) {
-      if (mounted.current) setNotice(`No pudimos elegir la carpeta. ${errorMessage(error)}`);
+      if (mounted.current) setNotice(message("watermarkTool.weCouldNotSelectTheFolder", { p0: errorMessage(error) }));
     } finally { dialog.current = false; }
   }
 
@@ -217,7 +241,7 @@ export function useImageProcessor() {
     const remaining = imagesRef.current.filter((image) => image.path !== path);
     imagesRef.current = remaining;
     setImages(remaining);
-    const maxWidth = remaining.reduce((maximum, item) => Math.max(maximum, item.width), 0);
+    const maxWidth = maxImageWidth(remaining, orientationEnabled);
     setResizeWidth((previous) => maxWidth ? String(Math.min(parseInt(previous, 10) || maxWidth, maxWidth)) : "");
     setResults([]); setProgress(0); setWasCancelled(false);
   }
@@ -281,10 +305,10 @@ export function useImageProcessor() {
       outputFormat,
       filenameSuffix: advancedEnabled ? filenameSuffix : "",
       overwriteExisting: advancedEnabled ? overwriteExisting : false,
-      applyOrientation: advancedEnabled ? applyOrientation : false,
+      applyOrientation: advancedEnabled ? applyOrientation : true,
       targetSizeKb: advancedEnabled ? targetSizeKb : null,
       effort: advancedEnabled ? effort : "balanced",
-      resizeWidth: resizeWidth ? parseInt(resizeWidth) : null,
+      resizeWidth: resizeWidth && parseInt(resizeWidth, 10) < maxImageWidth(imagesRef.current, orientationEnabled) ? parseInt(resizeWidth, 10) : null,
       resizeHeight: null,
       keepAspectRatio: true,
     };
@@ -299,12 +323,12 @@ export function useImageProcessor() {
       setProgress(((retained.length + completed.length) / total) * 100);
       if (completed.length < paths.length) {
         setWasCancelled(true);
-        setNotice(`Proceso cancelado. Se completaron ${completed.length} de ${paths.length} imágenes.`);
-      } else if (completed.every((result) => result.success) && loadSettings().soundOnFinish) {
+        setNotice(message("imageProcessor.processCancelledOfImagesCompleted", { p0: completed.length, p1: paths.length }));
+      } else if (completed.every((result) => result.success) && settingsRef.current.soundOnFinish) {
         playFinishSound();
       }
     } catch (error) {
-      if (mounted.current) setNotice(`El proceso se interrumpió. ${errorMessage(error)}`);
+      if (mounted.current) setNotice(message("imageProcessor.theProcessWasInterrupted", { p0: errorMessage(error) }));
     } finally {
       converting.current = false;
       cancelling.current = false;
@@ -316,13 +340,13 @@ export function useImageProcessor() {
     if (cancelling.current || !converting.current) return;
     cancelling.current = true;
     setIsCancelling(true);
-    setNotice("Deteniendo el proceso de forma segura…");
+    setNotice(message("imageProcessor.stoppingTheProcessSafely"));
     try {
       await invoke("cancel_conversion");
     } catch (error) {
       cancelling.current = false;
       setIsCancelling(false);
-      setNotice(`No pudimos detener el proceso. ${errorMessage(error)}`);
+      setNotice(message("watermarkTool.weCouldNotStopTheProcess", { p0: errorMessage(error) }));
     }
   }
 
@@ -333,9 +357,9 @@ export function useImageProcessor() {
     try {
       if (paths.length > 0) await revealItemInDir(paths);
       else if (outputDir) await invoke("open_output_directory", { path: outputDir });
-      else setNotice("Primero debes elegir una carpeta de destino.");
+      else setNotice(message("imageProcessor.selectAnOutputFolderFirst"));
     } catch (error) {
-      setNotice(`No pudimos mostrar los archivos en el Explorador. ${errorMessage(error)}`);
+      setNotice(message("imageProcessor.weCouldNotShowTheFiles", { p0: errorMessage(error) }));
     }
   }
 
@@ -343,7 +367,7 @@ export function useImageProcessor() {
     try {
       await revealItemInDir(path);
     } catch (error) {
-      setNotice(`No pudimos mostrar el archivo en el Explorador. ${errorMessage(error)}`);
+      setNotice(message("imageProcessor.weCouldNotShowTheFile", { p0: errorMessage(error) }));
     }
   }
 
@@ -352,7 +376,7 @@ export function useImageProcessor() {
 
   return {
     // State
-    images,
+    images: displayImages,
     mode,
     outputFormat,
     effort,
@@ -384,12 +408,12 @@ export function useImageProcessor() {
     setEffort,
     setFilenameSuffix,
     setOverwriteExisting,
-    setApplyOrientation,
+    setApplyOrientation: (value: boolean) => { updateOrientation(!advancedEnabled || value); setApplyOrientation(value); },
     setTargetSizeKb,
     setResizeWidth,
     setResizeHeight,
     setKeepAspectRatio,
-    setAdvancedEnabled,
+    setAdvancedEnabled: (value: boolean) => { updateOrientation(!value || applyOrientation); setAdvancedEnabled(value); },
     setNotice,
     setActiveTool,
     setResults,

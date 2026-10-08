@@ -1,3 +1,5 @@
+import { useTranslation } from "../i18n/useTranslation";
+
 import { Check, LoaderCircle, Square } from "lucide-react";
 
 export function ProgressCard({
@@ -17,6 +19,7 @@ export function ProgressCard({
   total: number;
   onCancel: () => void;
 }) {
+  const { t, plural, number } = useTranslation();
   const cardStyles = isConverting
     ? "border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)]"
     : wasCancelled
@@ -63,17 +66,16 @@ export function ProgressCard({
             <div>
               <h2 className="text-base font-extrabold text-[var(--color-text)]">
                 {isConverting
-                  ? "Optimizando las imágenes"
+                  ? t("progressCard.optimizingImages")
                   : wasCancelled
-                    ? "Proceso detenido"
-                    : "Proceso terminado"}
+                    ? t("progressCard.processStopped")
+                    : t("progressCard.processComplete")}
               </h2>
               <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                {processed} de {total} imágenes procesadas
-              </p>
+                {plural("images.progress.other", total, { processed })}</p>
             </div>
             <strong className={`text-2xl font-black tabular-nums ${percentStyles}`}>
-              {Math.round(progress)}%
+              {number(Math.round(progress))}%
             </strong>
           </div>
           <div className={`mt-3.5 h-3 overflow-hidden rounded-[22px] border-2 bg-[var(--color-control)] ${progressTrackBorder}`}>
@@ -98,7 +100,7 @@ export function ProgressCard({
           ) : (
             <Square size={11} strokeWidth={2} fill="currentColor" />
           )}
-          {isCancelling ? "Deteniendo…" : "Detener proceso"}
+          {isCancelling ? t("watermarkTool.stopping") : t("watermarkTool.stopProcess")}
         </button>
       )}
     </section>

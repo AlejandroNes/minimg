@@ -1,3 +1,6 @@
+
+import { useTranslation } from "./i18n/useTranslation";
+import { message, renderMessage } from "./i18n/index";
 import { useState } from "react";
 import type { ConversionResult } from "./types";
 import { CircleAlert, FolderOutput, Images, SlidersHorizontal, X } from "lucide-react";
@@ -7,8 +10,8 @@ import { getProcessingActivity as getImageActivity } from "./updater/imageActivi
 import { useUpdater } from "./hooks/useUpdater";
 import { UpdateDialog } from "./components/UpdateDialog";
 import { WatermarkTool } from "./WatermarkTool";
-import { FORMAT_OPTIONS } from "./components/FormatPicker";
-import { OPTIMIZATION_MODES } from "./components/ModePicker";
+import { getFormatPickerOptions } from "./components/FormatPicker";
+import { getModePickerOptions } from "./components/ModePicker";
 
 // Components
 import { AppHeader } from "./components/AppHeader";
@@ -27,6 +30,17 @@ import { ImageComparisonModal } from "./components/ImageComparisonModal";
 import { SettingsDrawer } from "./components/SettingsDrawer";
 
 function App() {
+  const { t } = useTranslation();
+  const {
+    settings,
+    setTheme,
+    setUsername,
+    setSoundOnFinish,
+    reset,
+    isOpen: isSettingsOpen,
+    open: openSettings,
+    close: closeSettings,
+  } = useSettings();
   const {
     // State
     images,
@@ -78,18 +92,7 @@ function App() {
     cancelConversion,
     showOptimizedFiles,
     showFile,
-  } = useImageProcessor();
-
-  const {
-    settings,
-    setTheme,
-    setUsername,
-    setSoundOnFinish,
-    reset,
-    isOpen: isSettingsOpen,
-    open: openSettings,
-    close: closeSettings,
-  } = useSettings();
+  } = useImageProcessor(settings);
 
   const [comparingResult, setComparingResult] = useState<ConversionResult | null>(null);
   const [cacheResetKey, setCacheResetKey] = useState(0);
@@ -115,11 +118,11 @@ function App() {
     setCacheResetKey((prev) => prev + 1);
 
     // 4. Set feedback notice
-    setNotice("Caché y memoria liberados. Todo el espacio de trabajo ha quedado limpio.");
+    setNotice(message("app.cacheAndMemoryClearedYourWorkspace"));
   };
 
-  const selectedMode = OPTIMIZATION_MODES.find((item) => item.value === mode);
-  const selectedFormat = FORMAT_OPTIONS.find((item) => item.value === outputFormat);
+  const selectedMode = getModePickerOptions(t).find((item) => item.value === mode);
+  const selectedFormat = getFormatPickerOptions(t).find((item) => item.value === outputFormat);
 
   const maxWidth = images.length > 0 ? Math.max(...images.map((img) => img.width || 0)) : 1920;
 
@@ -137,16 +140,9 @@ function App() {
       <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-8 sm:py-8">
         {/* Page intro */}
         <div className="mb-8 max-w-2xl">
-          <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[var(--color-accent-text)]">
-            Optimización por lotes
-          </p>
-          <h2 className="mt-2.5 text-2xl font-black tracking-[-0.03em] text-[var(--color-text)] sm:text-3xl">
-            Imágenes más ligeras, paso a paso
-          </h2>
-          <p className="mt-2.5 text-sm leading-6 text-[var(--color-text-secondary)] sm:text-base">
-            Añade tus archivos, elige cómo quieres reducirlos y selecciona dónde guardarlos. Tus
-            originales nunca se modifican.
-          </p>
+          <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[var(--color-accent-text)]">{t("app.batchOptimization")}{" "}</p>
+          <h2 className="mt-2.5 text-2xl font-black tracking-[-0.03em] text-[var(--color-text)] sm:text-3xl">{t("app.lighterImagesStepByStep")}{" "}</h2>
+          <p className="mt-2.5 text-sm leading-6 text-[var(--color-text-secondary)] sm:text-base">{t("app.addYourFilesChooseHowTo")}{" "}</p>
         </div>
 
         {/* Notice */}
@@ -156,12 +152,12 @@ function App() {
             className="animate-slide-up mb-6 flex items-start gap-3 rounded-[22px] border-2 border-[var(--color-amarillo-border)] bg-[var(--color-amarillo-bg)] px-4 py-3.5 text-sm text-[var(--color-amarillo-text)]"
           >
             <CircleAlert size={18} strokeWidth={2} className="mt-0.5 shrink-0 text-[var(--color-amarillo-text)]" />
-            <span className="flex-1 font-medium leading-5">{notice}</span>
+            <span className="flex-1 font-medium leading-5">{renderMessage(notice)}</span>
             <button
               type="button"
               onClick={() => setNotice(null)}
               className="rounded-[22px] p-1 text-[var(--color-amarillo-text)] hover:bg-[var(--color-amarillo-border)]/30"
-              aria-label="Cerrar mensaje"
+              aria-label={t("app.dismissMessage")}
             >
               <X size={17} strokeWidth={2} />
             </button>
@@ -183,8 +179,8 @@ function App() {
                 number={1}
                 completed={images.length > 0}
                 icon={<Images size={19} strokeWidth={2} />}
-                title="Añade las imágenes"
-                description="Puedes seleccionar varias a la vez o arrastrarlas desde una carpeta."
+                title={t("app.addImages")}
+                description={t("app.selectSeveralImagesAtOnceOr")}
               />
               <DropZone
                 isDragging={isDragging}
@@ -211,8 +207,8 @@ function App() {
                 number={2}
                 completed={!!selectedFormat}
                 icon={<SlidersHorizontal size={19} strokeWidth={2} />}
-                title="Elige el formato"
-                description="Puedes mantener el formato Automático recomendado."
+                title={t("app.chooseTheFormat")}
+                description={t("app.youCanKeepTheRecommendedAutomatic")}
               />
               <div className="mt-5">
                 <FormatPicker
@@ -248,8 +244,8 @@ function App() {
                 number={5}
                 completed={!!outputDir}
                 icon={<FolderOutput size={19} strokeWidth={2} />}
-                title="Elige dónde guardar los resultados"
-                description="Las imágenes originales permanecerán intactas en su ubicación actual."
+                title={t("app.chooseWhereToSaveTheResults")}
+                description={t("app.yourOriginalImagesWillRemainIntact")}
               />
               <OutputPicker
                 outputDir={outputDir}
@@ -327,7 +323,7 @@ function App() {
         </div>
 
         {/* Watermark tool */}
-        {activeTool === "watermark" && <WatermarkTool key={cacheResetKey} />}
+        {activeTool === "watermark" && <WatermarkTool key={cacheResetKey} settings={settings} />}
       </div>
 
       {/* Modals */}

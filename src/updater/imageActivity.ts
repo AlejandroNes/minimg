@@ -1,3 +1,4 @@
+import { message, LocalizedError } from "../i18n/index.ts";
 let activeTasks = 0;
 const listeners = new Set<() => void>();
 export const getImageActivity = () => activeTasks > 0;
@@ -22,7 +23,7 @@ let updateActive = false;
 export const getProcessingActivity = () => getImageActivity() || updateActive;
 
 export async function trackUpdateTask<T>(task: () => Promise<T>): Promise<T> {
-  if (getProcessingActivity()) throw new Error("Espera a que termine la operación actual.");
+  if (getProcessingActivity()) throw new LocalizedError(message("imageActivity.waitForTheCurrentOperationTo"));
   updateActive = true;
   try { return await task(); }
   finally { updateActive = false; }

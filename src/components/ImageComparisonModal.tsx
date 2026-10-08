@@ -1,3 +1,5 @@
+import { useTranslation } from "../i18n/useTranslation";
+
 import { useEffect, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { X, LoaderCircle } from "lucide-react";
@@ -12,12 +14,13 @@ export function ImageComparisonModal({
   outputPath: string;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [sourceUrl, setSourceUrl] = useState<string | null>(null);
   const [outputUrl, setOutputUrl] = useState<string | null>(null);
   const [position, setPosition] = useState(50);
   const [isLoading, setIsLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const activePointer = useRef<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -39,7 +42,7 @@ export function ImageComparisonModal({
           setIsLoading(false);
         }
       } catch {
-        console.error("No se pudieron cargar las imágenes de la comparación.");
+        console.error(t("imageComparisonModal.theComparisonImagesCouldNotBe"));
         if (active) setIsLoading(false);
       }
     }
@@ -75,13 +78,31 @@ export function ImageComparisonModal({
     };
   }, [onClose]);
 
-  const handlePointerDown = () => setIsDragging(true);
-  const handlePointerUp = () => setIsDragging(false);
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDragging || !containerRef.current) return;
+  const updatePosition = (clientX: number) => {
+    if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    if (rect.width <= 0) return;
+    const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
     setPosition((x / rect.width) * 100);
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || activePointer.current !== null) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    activePointer.current = e.pointerId;
+    updatePosition(e.clientX);
+  };
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (activePointer.current !== e.pointerId) return;
+    activePointer.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  };
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (activePointer.current !== e.pointerId) return;
+    updatePosition(e.clientX);
   };
 
   return (
@@ -89,19 +110,19 @@ export function ImageComparisonModal({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Comparación visual"
+        aria-label={t("imageComparisonModal.visualComparison")}
         className="relative flex h-full max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] animate-scale-in"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] p-4">
           <div>
-            <h3 className="text-sm font-black text-[var(--color-text)]">Comparación Visual</h3>
+            <h3 className="text-sm font-black text-[var(--color-text)]">{t("imageComparisonModal.visualComparisonAlt")}</h3>
             <p className="text-xs text-[var(--color-text-dim)]">{fileNameFromPath(sourcePath)}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Cerrar comparación"
+            aria-label={t("imageComparisonModal.closeComparison")}
             className="rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-control)] p-2 text-[var(--color-celeste-text)] transition-colors hover:bg-[var(--color-celeste-bg)]"
           >
             <X size={20} strokeWidth={2} />
@@ -113,7 +134,7 @@ export function ImageComparisonModal({
           {isLoading ? (
             <div className="flex flex-col items-center gap-3 text-[var(--color-accent)]">
               <LoaderCircle size={32} strokeWidth={2} className="animate-spin" />
-              <p className="text-sm font-bold">Cargando imágenes...</p>
+              <p className="text-sm font-bold">{t("imageComparisonModal.loadingImages")}</p>
             </div>
           ) : sourceUrl && outputUrl ? (
             <div
@@ -122,20 +143,21 @@ export function ImageComparisonModal({
               onPointerDown={handlePointerDown}
               onPointerUp={handlePointerUp}
               onPointerMove={handlePointerMove}
-              onPointerLeave={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              onLostPointerCapture={handlePointerUp}
               style={{ touchAction: "none" }}
             >
               {/* Output Image (Background / Después) */}
               <img
                 src={outputUrl}
-                alt="Después (Comprimida)"
+                alt={t("imageComparisonModal.afterCompressed")}
                 className="pointer-events-none absolute inset-0 h-full w-full object-contain"
               />
 
               {/* Source Image (Foreground / Antes) with Clip Path */}
               <img
                 src={sourceUrl}
-                alt="Antes (Original)"
+                alt={t("imageComparisonModal.beforeOriginal")}
                 className="pointer-events-none absolute inset-0 h-full w-full object-contain"
                 style={{ clipPath: `inset(0 ${100 - position}% 0 0)` }}
               />
@@ -144,7 +166,7 @@ export function ImageComparisonModal({
               <div
                 role="slider"
                 tabIndex={0}
-                aria-label="Separador de comparación"
+                aria-label={t("imageComparisonModal.comparisonDivider")}
                 aria-valuenow={Math.round(position)}
                 aria-valuemin={0}
                 aria-valuemax={100}
@@ -167,17 +189,11 @@ export function ImageComparisonModal({
               </div>
 
               {/* Labels */}
-              <div className="absolute bottom-4 left-4 rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] px-3 py-1.5 text-xs font-bold text-[var(--color-celeste-text)]">
-                Antes (Original)
-              </div>
-              <div className="absolute bottom-4 right-4 rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] px-3 py-1.5 text-xs font-bold text-[var(--color-celeste-text)]">
-                Después (Optimizada)
-              </div>
+              <div className="absolute bottom-4 left-4 rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] px-3 py-1.5 text-xs font-bold text-[var(--color-celeste-text)]">{t("imageComparisonModal.beforeOriginal")}{" "}</div>
+              <div className="absolute bottom-4 right-4 rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-celeste-bg)] px-3 py-1.5 text-xs font-bold text-[var(--color-celeste-text)]">{t("imageComparisonModal.afterOptimized")}{" "}</div>
             </div>
           ) : (
-            <p className="text-sm font-bold text-[var(--color-coral-text)]">
-              No se pudieron cargar las imágenes.
-            </p>
+            <p className="text-sm font-bold text-[var(--color-coral-text)]">{t("imageComparisonModal.theImagesCouldNotBeLoaded")}{" "}</p>
           )}
         </div>
       </div>

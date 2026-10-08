@@ -1,15 +1,7 @@
+import { useTranslation } from "../i18n/useTranslation";
+
 import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import type { OptimizationEffort, OutputFormat } from "../types";
-
-const EFFORT_OPTIONS: {
-  value: OptimizationEffort;
-  label: string;
-  description: string;
-}[] = [
-    { value: "fast", label: "Rápido", description: "Menos intentos" },
-    { value: "balanced", label: "Equilibrado", description: "Recomendado" },
-    { value: "maximum", label: "Exhaustivo", description: "Más intentos" },
-  ];
 
 export function AdvancedPanel({
   filenameSuffix,
@@ -42,16 +34,24 @@ export function AdvancedPanel({
   onEnabledChange: (v: boolean) => void;
   disabled: boolean;
 }) {
+  const { t } = useTranslation();
+  const EFFORT_OPTIONS: {
+  value: OptimizationEffort;
+  label: string;
+  description: string;
+}[] = [
+    { value: "fast", label: t("advancedPanel.fast"), description: t("advancedPanel.fewerAttempts") },
+    { value: "balanced", label: t("advancedPanel.balanced"), description: t("advancedPanel.recommended") },
+    { value: "maximum", label: t("advancedPanel.thorough"), description: t("advancedPanel.moreAttempts") },
+  ];
   return (
     <details className="advanced-panel mt-4">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[22px] px-4 py-3.5 text-xs font-bold text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-control)]/50">
         <span className="flex items-center gap-2.5">
-          <SlidersHorizontal size={16} strokeWidth={2} className="text-[var(--color-celeste-text)]" />
-          Ajustes avanzados
-          <span
+          <SlidersHorizontal size={16} strokeWidth={2} className="text-[var(--color-celeste-text)]" />{t("advancedPanel.advancedSettings")}{" "}<span
             className={`font-medium ${enabled ? "text-[var(--color-celeste-text)]" : "text-[var(--color-coral-text)]"}`}
           >
-            {enabled ? "(opcionales)" : "(desactivados)"}
+            {enabled ? t("advanced.optional") : t("advanced.disabled")}
           </span>
         </span>
         <span className="flex items-center gap-3">
@@ -59,7 +59,7 @@ export function AdvancedPanel({
             type="button"
             role="switch"
             aria-checked={enabled}
-            aria-label={enabled ? "Desactivar ajustes avanzados" : "Activar ajustes avanzados"}
+            aria-label={enabled ? t("advancedPanel.disableAdvancedSettings") : t("advancedPanel.enableAdvancedSettings")}
             disabled={disabled}
             onClick={(event) => {
               event.preventDefault();
@@ -81,24 +81,19 @@ export function AdvancedPanel({
       </summary>
       <div className="grid gap-5 border-t-2 border-[var(--color-celeste-border)] px-4 pb-4 pt-5 md:grid-cols-2">
         {!enabled && (
-          <p className="text-sm text-[var(--color-text-secondary)] md:col-span-2">
-            Estos ajustes están desactivados y no se aplicarán a las imágenes. Actívalos para utilizarlos.
-          </p>
+          <p className="text-sm text-[var(--color-text-secondary)] md:col-span-2">{t("advancedPanel.theseSettingsAreDisabledAndWill")}{" "}</p>
         )}
         {/* Filename suffix */}
         <div>
-          <label htmlFor="filename-suffix" className="text-xs font-bold text-[var(--color-text)]">
-            Texto añadido al nombre
-          </label>
-          <p className="mt-1 text-sm leading-5 text-[var(--color-text-dim)]">
-            Ejemplo: foto.jpg se guardará como foto{enabled ? filenameSuffix || "" : ""}.webp
+          <label htmlFor="filename-suffix" className="text-xs font-bold text-[var(--color-text)]">{t("advancedPanel.textAddedToTheFilename")}{" "}</label>
+          <p className="mt-1 text-sm leading-5 text-[var(--color-text-dim)]">{t("advanced.filenameExample", { suffix: enabled ? filenameSuffix || "" : "" })}
           </p>
           <input
             id="filename-suffix"
             value={filenameSuffix}
             onChange={(e) => setFilenameSuffix(e.target.value)}
             disabled={disabled || !enabled}
-            placeholder="-optimizada"
+            placeholder={t("advancedPanel.optimized")}
             maxLength={80}
             className="form-input mt-2"
           />
@@ -106,12 +101,8 @@ export function AdvancedPanel({
 
         {/* Target size */}
         <div>
-          <label htmlFor="target-size" className="text-xs font-bold text-[var(--color-text)]">
-            Peso objetivo
-          </label>
-          <p className="mt-1 text-sm leading-5 text-[var(--color-text-dim)]">
-            Opcional. Intentará no superar este tamaño; puede ser imposible en PNG o calidad alta.
-          </p>
+          <label htmlFor="target-size" className="text-xs font-bold text-[var(--color-text)]">{t("advancedPanel.targetFileSize")}{" "}</label>
+          <p className="mt-1 text-sm leading-5 text-[var(--color-text-dim)]">{t("advancedPanel.optionalAttemptsToStayBelowThis")}{" "}</p>
           <div className="mt-2 flex items-center gap-2">
             <input
               id="target-size"
@@ -127,7 +118,7 @@ export function AdvancedPanel({
                 );
               }}
               disabled={disabled || !enabled}
-              placeholder="Ej.: 500"
+              placeholder={t("advancedPanel.eG")}
               className="form-input"
             />
             <span className="shrink-0 text-xs font-bold text-[var(--color-text-dim)]">
@@ -138,12 +129,8 @@ export function AdvancedPanel({
 
         {/* Effort */}
         <fieldset>
-          <legend className="text-xs font-bold text-[var(--color-text)]">
-            Profundidad de búsqueda
-          </legend>
-          <p className="mt-1 text-sm leading-5 text-[var(--color-text-dim)]">
-            Solo afecta al formato Automático; los formatos manuales respetan su calidad elegida.
-          </p>
+          <legend className="text-xs font-bold text-[var(--color-text)]">{t("advancedPanel.searchEffort")}{" "}</legend>
+          <p className="mt-1 text-sm leading-5 text-[var(--color-text-dim)]">{t("advancedPanel.onlyAffectsTheAutomaticFormatManual")}{" "}</p>
           <div className="mt-2.5 grid grid-cols-3 gap-1 rounded-[22px] border-2 border-[var(--color-celeste-border)] bg-[var(--color-control)] p-1">
             {EFFORT_OPTIONS.map((item) => (
               <button
@@ -159,7 +146,7 @@ export function AdvancedPanel({
                 title={
                   outputFormat === "automatic"
                     ? item.description
-                    : "Disponible al usar el formato Automático"
+                    : t("advancedPanel.availableWithTheAutomaticFormat")
                 }
               >
                 {item.label}
@@ -178,10 +165,8 @@ export function AdvancedPanel({
               disabled={disabled || !enabled}
             />
             <span>
-              <b>Corregir fotos giradas</b>
-              <small>
-                Lee la orientación guardada por la cámara y coloca la imagen correctamente.
-              </small>
+              <b>{t("advancedPanel.correctRotatedPhotos")}</b>
+              <small>{t("advancedPanel.readsTheOrientationSavedByThe")}{" "}</small>
             </span>
           </label>
           <label className="option-toggle">
@@ -192,10 +177,8 @@ export function AdvancedPanel({
               disabled={disabled || !enabled}
             />
             <span>
-              <b>Reemplazar archivos con el mismo nombre</b>
-              <small>
-                Desactivado, el sistema crea una copia numerada para no perder archivos.
-              </small>
+              <b>{t("advancedPanel.overwriteFilesWithTheSameName")}</b>
+              <small>{t("advancedPanel.whenDisabledANumberedCopyIs")}{" "}</small>
             </span>
           </label>
         </div>

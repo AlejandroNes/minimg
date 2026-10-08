@@ -1,3 +1,5 @@
+import { useTranslation } from "../i18n/useTranslation";
+
 import { ImagePlus, LoaderCircle } from "lucide-react";
 
 export function DropZone({
@@ -11,6 +13,7 @@ export function DropZone({
   isLoading: boolean;
   onClick: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <button
       disabled={disabled}
@@ -36,12 +39,10 @@ export function DropZone({
         </span>
         <strong className="mt-5 text-base font-extrabold text-[var(--color-text)]">
           {isDragging
-            ? "Suelta las imágenes aquí"
-            : "Arrastra imágenes o haz clic para seleccionarlas"}
+            ? t("watermarkTool.dropImagesHere")
+            : t("dropZone.dragImagesOrClickToSelect")}
         </strong>
-        <span className="mt-2 text-sm font-medium text-[var(--color-text-dim)]">
-          Formatos permitidos: JPG, JPEG, PNG y WebP
-        </span>
+        <span className="mt-2 text-sm font-medium text-[var(--color-text-dim)]">{t("dropZone.supportedFormatsJpgJpegPngAnd")}{" "}</span>
       </span>
     </button>
   );

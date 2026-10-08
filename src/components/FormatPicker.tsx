@@ -1,6 +1,10 @@
+import type { Translator } from "../i18n/index";
+import { useTranslation } from "../i18n/useTranslation";
+
 import { Check, CircleAlert } from "lucide-react";
 import type { OutputFormat } from "../types";
 
+export function getFormatPickerOptions(t: Translator) {
 const FORMAT_OPTIONS: {
   value: OutputFormat;
   label: string;
@@ -9,28 +13,28 @@ const FORMAT_OPTIONS: {
 }[] = [
     {
       value: "automatic",
-      label: "Automático",
-      description: "Usa WebP y ajusta la calidad según cada imagen.",
-      badge: "Recomendado",
+      label: t("formatPicker.automatic"),
+      description: t("formatPicker.usesWebpAndAdjustsTheQuality"),
+      badge: t("advancedPanel.recommended"),
     },
     {
       value: "webp",
       label: "WebP",
-      description: "Ligero y compatible con la mayoría de plataformas.",
+      description: t("formatPicker.smallFilesCompatibleWithMostPlatforms"),
     },
     {
       value: "jpeg",
       label: "JPEG",
-      description: "Ideal para fotografías y máxima compatibilidad.",
+      description: t("formatPicker.idealForPhotosAndMaximumCompatibility"),
     },
     {
       value: "png",
       label: "PNG",
-      description: "Conserva transparencia, logotipos y gráficos.",
+      description: t("formatPicker.preservesTransparencyLogosAndGraphics"),
     },
   ];
-
-export { FORMAT_OPTIONS };
+  return FORMAT_OPTIONS;
+}
 
 export function FormatPicker({
   value,
@@ -41,6 +45,8 @@ export function FormatPicker({
   onChange: (format: OutputFormat) => void;
   disabled: boolean;
 }) {
+  const { t } = useTranslation();
+  const FORMAT_OPTIONS = getFormatPickerOptions(t);
   return (
     <div>
       <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
@@ -76,10 +82,7 @@ export function FormatPicker({
       {value === "jpeg" && (
         <div className="mt-3 flex gap-2.5 rounded-[22px] border-2 border-[var(--color-amarillo-border)] bg-[var(--color-amarillo-bg)] px-3.5 py-3 text-sm leading-5 text-[var(--color-amarillo-text)]">
           <CircleAlert size={16} strokeWidth={2} className="mt-0.5 shrink-0 text-[var(--color-amarillo-text)]" />
-          <p>
-            JPEG no admite transparencia. Si una imagen tiene zonas transparentes, se colocarán
-            sobre un fondo blanco.
-          </p>
+          <p>{t("formatPicker.jpegDoesNotSupportTransparencyTransparent")}{" "}</p>
         </div>
       )}
     </div>

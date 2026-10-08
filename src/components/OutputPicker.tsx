@@ -1,3 +1,5 @@
+import { useTranslation } from "../i18n/useTranslation";
+
 import { FolderCheck, FolderOpen } from "lucide-react";
 
 export function OutputPicker({
@@ -9,6 +11,7 @@ export function OutputPicker({
   outputDir: string;
   onChoose: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <button
       disabled={disabled}
@@ -31,10 +34,10 @@ export function OutputPicker({
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-extrabold text-[var(--color-text)]">
-          {outputDir ? "Carpeta de destino seleccionada" : "Seleccionar carpeta de destino"}
+          {outputDir ? t("outputPicker.outputFolderSelected") : t("watermarkTool.selectOutputFolder")}
         </span>
         <span className="mt-1 block truncate text-sm text-[var(--color-text-secondary)]">
-          {outputDir || "Aquí se guardarán las imágenes optimizadas"}
+          {outputDir || t("outputPicker.optimizedImagesWillBeSavedHere")}
         </span>
       </span>
       <span
@@ -44,7 +47,7 @@ export function OutputPicker({
             : "border-[var(--color-celeste-border)] bg-[var(--color-control)] text-[var(--color-celeste-text)]"
         }`}
       >
-        {outputDir ? "Cambiar" : "Elegir"}
+        {outputDir ? t("output.change") : t("output.choose")}
       </span>
     </button>
   );
