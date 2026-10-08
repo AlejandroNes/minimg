@@ -185,7 +185,7 @@ impl ConversionState {
 fn validate_conversion_request(request: &ConversionRequest) -> Result<(), String> {
     security::validate_batch(&request.paths)?;
     if request.resize_width == Some(0) || request.resize_height == Some(0) {
-        return Err(app_error!("resize_invalid").into());
+        return Err(app_error!("resize_invalid"));
     }
     if let (Some(width), Some(height)) = (request.resize_width, request.resize_height) {
         security::validate_dimensions(width, height)?;
@@ -195,7 +195,7 @@ fn validate_conversion_request(request: &ConversionRequest) -> Result<(), String
             .target_size_kb
             .is_some_and(|value| value > u64::MAX / 1024)
     {
-        return Err(app_error!("target_size_invalid").into());
+        return Err(app_error!("target_size_invalid"));
     }
     Ok(())
 }
@@ -210,7 +210,7 @@ fn validate_watermark_request(request: &WatermarkRequest) -> Result<(), String> 
             .flatten()
             .any(|value| !value.is_finite() || !(0.0..=100.0).contains(&value))
     {
-        return Err(app_error!("watermark_invalid").into());
+        return Err(app_error!("watermark_invalid"));
     }
     Ok(())
 }

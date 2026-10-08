@@ -62,7 +62,7 @@ fn write_file_atomically_using(
         .parent()
         .ok_or_else(|| app_error!("output_path_invalid", context: output_path.display()))?;
     if output_path.file_name().is_none() {
-        return Err(app_error!("output_name_invalid").into());
+        return Err(app_error!("output_name_invalid"));
     }
     let nonce = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -249,7 +249,7 @@ fn load_image_with_transform(
     let (width, height) = decoder.dimensions();
     security::validate_dimensions(width, height)?;
     if decoder.total_bytes() > security::MAX_INPUT_BYTES {
-        return Err(app_error!("decoded_too_large").into());
+        return Err(app_error!("decoded_too_large"));
     }
     let orientation = decoder
         .orientation()

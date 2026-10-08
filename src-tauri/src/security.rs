@@ -19,39 +19,39 @@ static IMAGE_WORK: Mutex<()> = Mutex::new(());
 pub fn image_work() -> Result<MutexGuard<'static, ()>, String> {
     IMAGE_WORK
         .lock()
-        .map_err(|_| app_error!("memory_unavailable").into())
+        .map_err(|_| app_error!("memory_unavailable"))
 }
 
 pub fn validate_batch(paths: &[String]) -> Result<(), String> {
     if paths.len() > MAX_BATCH_IMAGES {
-        return Err(app_error!("batch_too_large").into());
+        return Err(app_error!("batch_too_large"));
     }
     Ok(())
 }
 
 pub fn validate_dimensions(width: u32, height: u32) -> Result<(), String> {
     if width == 0 || height == 0 || u64::from(width) * u64::from(height) > MAX_IMAGE_PIXELS {
-        return Err(app_error!("dimensions_invalid").into());
+        return Err(app_error!("dimensions_invalid"));
     }
     Ok(())
 }
 
 pub fn directory(path: &Path) -> Result<PathBuf, String> {
     if !path.is_absolute() {
-        return Err(app_error!("directory_relative").into());
+        return Err(app_error!("directory_relative"));
     }
     let path = path
         .canonicalize()
         .map_err(|_| app_error!("directory_invalid"))?;
     if !path.is_dir() {
-        return Err(app_error!("not_directory").into());
+        return Err(app_error!("not_directory"));
     }
     Ok(path)
 }
 
 pub fn open_image_file(path: &Path) -> Result<File, String> {
     if !path.is_absolute() {
-        return Err(app_error!("image_relative").into());
+        return Err(app_error!("image_relative"));
     }
     let extension = path
         .extension()
@@ -61,7 +61,7 @@ pub fn open_image_file(path: &Path) -> Result<File, String> {
         .iter()
         .any(|value| extension.eq_ignore_ascii_case(value))
     {
-        return Err(app_error!("format_unsupported").into());
+        return Err(app_error!("format_unsupported"));
     }
     let check = |metadata: std::fs::Metadata| {
         if !metadata.is_file() {
@@ -89,7 +89,7 @@ pub fn image_reader(path: &Path) -> Result<ImageReader<BufReader<File>>, String>
         reader.format(),
         Some(ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::WebP)
     ) {
-        return Err(app_error!("content_unsupported").into());
+        return Err(app_error!("content_unsupported"));
     }
     reader.limits(image::Limits::default());
     Ok(reader)
@@ -112,7 +112,7 @@ pub fn inspect_display_image(path: &Path) -> Result<(u64, u32, u32, u32, u32), S
     let (width, height) = decoder.dimensions();
     validate_dimensions(width, height)?;
     if decoder.total_bytes() > MAX_INPUT_BYTES {
-        return Err(app_error!("decoded_too_large").into());
+        return Err(app_error!("decoded_too_large"));
     }
     use image::metadata::Orientation;
     let orientation = decoder
@@ -141,7 +141,7 @@ pub fn read_image_bytes(path: &Path) -> Result<Vec<u8>, String> {
         .read_to_end(&mut bytes)
         .map_err(|error| app_error!("image_read", detail: error))?;
     if bytes.len() as u64 > MAX_INPUT_BYTES {
-        return Err(app_error!("file_too_large").into());
+        return Err(app_error!("file_too_large"));
     }
     let reader = ImageReader::new(std::io::Cursor::new(&bytes))
         .with_guessed_format()
@@ -150,7 +150,7 @@ pub fn read_image_bytes(path: &Path) -> Result<Vec<u8>, String> {
         reader.format(),
         Some(ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::WebP)
     ) {
-        return Err(app_error!("content_changed").into());
+        return Err(app_error!("content_changed"));
     }
     let decoder = reader
         .into_decoder()
@@ -158,7 +158,7 @@ pub fn read_image_bytes(path: &Path) -> Result<Vec<u8>, String> {
     let (width, height) = decoder.dimensions();
     validate_dimensions(width, height)?;
     if decoder.total_bytes() > MAX_INPUT_BYTES {
-        return Err(app_error!("decoded_too_large").into());
+        return Err(app_error!("decoded_too_large"));
     }
     drop(decoder);
     Ok(bytes)
